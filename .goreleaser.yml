@@ -1,0 +1,67 @@
+version: 2
+
+project_name: runright
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: runright
+    main: ./cmd/runright
+    binary: runright
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: runright
+    builds:
+      - runright
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: sgbudje
+    name: runright
+  draft: false
+  prerelease: auto
+  header: |
+    ## runright {{ .Tag }}
+
+    Download the binary for your platform below, or use the GitHub Action:
+    ```yaml
+    - uses: sgbudje/runright@{{ .Tag }}
+      with:
+        step: start
+    ```
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch

@@ -1,0 +1,195 @@
+/* ── Theme custom properties ─────────────────────────────────────
+   Applied on the root div (.lp-root). The dark variant is toggled
+   by adding .lp-dark to that same element.                        */
+.lp-root {
+  --lp-bg:          #FBF0DC;
+  --lp-paper:       #FFFDF7;
+  --lp-paper-alt:   #F3E2C2;
+  --lp-text:        #2C1A0E;
+  --lp-text-mid:    #6B4226;
+  --lp-text-light:  #9A7B5A;
+  --lp-border:      #D4B896;
+  --lp-works-bg:    #F3E2C2;
+  --lp-dark-strip:  #2C1A0E;
+}
+.lp-root.lp-dark {
+  --lp-bg:          #130C05;
+  --lp-paper:       #1E1209;
+  --lp-paper-alt:   #251708;
+  --lp-text:        #F5E4C8;
+  --lp-text-mid:    #C09870;
+  --lp-text-light:  #9A7B5A;
+  --lp-border:      #3D2810;
+  --lp-works-bg:    #1E1209;
+  --lp-dark-strip:  #0A0603;
+}
+
+/* ── Dark mode toggle button ─────────────────────────────────── */
+.lp-theme-toggle {
+  background: none;
+  border: 1.5px solid var(--lp-border);
+  color: var(--lp-text-light);
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.lp-theme-toggle:hover {
+  border-color: var(--lp-text);
+  color: var(--lp-text);
+}
+
+/* ── Sign In button (managed via class, not inline style) ─────── */
+.lp-signin-btn {
+  background: #2C1A0E !important;
+  color: #FBF0DC !important;
+  border-color: #2C1A0E !important;
+}
+.lp-root.lp-dark .lp-signin-btn {
+  background: var(--lp-border) !important;
+  color: var(--lp-bg) !important;
+  border-color: var(--lp-border) !important;
+}
+.lp-signin-btn:hover,
+.lp-root.lp-dark .lp-signin-btn:hover {
+  background: #C23B22 !important;
+  border-color: #C23B22 !important;
+  color: #FBF0DC !important;
+}
+
+/* ── Nav GitHub link hover ───────────────────────────────────── */
+.lp-nav-github:hover {
+  background: #C23B22 !important;
+  color: #FBF0DC !important;
+  border-color: #C23B22 !important;
+}
+
+/* ── LandingPage responsive overrides ────────────────────────────
+   Inline styles control colours / typography; these classes handle
+   layout breakpoints. !important is intentional: overriding inline. */
+
+/* ── Tablet (≤ 900px) ─────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .lp-nav {
+    padding: 16px 28px !important;
+  }
+
+  .lp-hero {
+    padding: 64px 32px 56px !important;
+  }
+
+  .lp-proof-bar {
+    padding: 12px 28px !important;
+    gap: 24px !important;
+  }
+
+  .lp-section {
+    padding: 56px 32px !important;
+  }
+
+  .lp-steps {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  .lp-feature-strip {
+    padding: 52px 32px !important;
+  }
+
+  .lp-features {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 24px !important;
+  }
+
+  .lp-works {
+    padding: 56px 32px !important;
+  }
+
+  .lp-card-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* full-width span no longer needed in 1-col */
+  .lp-card-grid > [style*="gridColumn"] {
+    grid-column: auto !important;
+  }
+
+  .lp-cta {
+    padding: 56px 32px !important;
+  }
+
+  .lp-footer {
+    padding: 24px 28px !important;
+    gap: 16px !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+}
+
+/* ── Mobile (≤ 600px) ─────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .lp-nav {
+    padding: 14px 20px !important;
+  }
+
+  /* Hide the GitHub nav button on small screens to save space */
+  .lp-nav-github {
+    display: none !important;
+  }
+
+  .lp-hero {
+    padding: 48px 20px 40px !important;
+  }
+
+  .lp-proof-bar {
+    padding: 10px 20px !important;
+    gap: 14px !important;
+  }
+
+  .lp-section {
+    padding: 48px 20px !important;
+  }
+
+  .lp-feature-strip {
+    padding: 44px 20px !important;
+  }
+
+  .lp-features {
+    grid-template-columns: 1fr !important;
+  }
+
+  .lp-works {
+    padding: 48px 20px !important;
+  }
+
+  .lp-install-step {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .lp-install-num {
+    font-size: 36px !important;
+    width: auto !important;
+  }
+
+  .lp-pricing-card {
+    padding: 32px 24px !important;
+  }
+
+  .lp-cta {
+    padding: 48px 20px !important;
+  }
+
+  .lp-footer {
+    padding: 20px !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 12px !important;
+  }
+}

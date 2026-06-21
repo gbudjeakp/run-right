@@ -1,0 +1,57 @@
+# Binaries
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build cache
+/runright
+/scale-ci
+
+# Go test output
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Go modules download cache (keep go.sum)
+vendor/
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.pnpm-store/
+web/pnpm-lock.yaml.bak
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Docs (local only)
+docs/
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+.runright/
+metrics-summary.json
