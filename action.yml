@@ -1,0 +1,281 @@
+name: runright
+description: "Monitor CI job resource usage and get machine sizing recommendations"
+author: "sgbudje"
+
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  step:
+    description: "Action step to run: 'start' or 'stop' (standalone mode)"
+    required: false
+    default: ""
+  run:
+    description: "Command to wrap (wrapper mode — runs command with monitoring active)"
+    required: false
+    default: ""
+  duration:
+    description: "Max monitoring duration (e.g. 30m). Defaults to unlimited."
+    required: false
+    default: "0"
+  interval:
+    description: "Metrics sampling interval (e.g. 5s)"
+    required: false
+    default: "5s"
+  export:
+    description: "Comma-separated export backends: file,otlp,prometheus,http"
+    required: false
+    default: "file"
+  output-dir:
+    description: "Directory to write metrics files"
+    required: false
+    default: "${{ github.workspace }}/.runright"
+  job-id:
+    description: "Unique job identifier (defaults to GitHub run ID)"
+    required: false
+    default: "${{ github.run_id }}-${{ github.run_attempt }}"
+  http-url:
+    description: "runright backend URL for http export"
+    required: false
+    default: ""
+  upload-artifact:
+    description: "Upload metrics files as a GitHub Artifact"
+    required: false
+    default: "true"
+  version:
+    description: "runright binary version to download"
+    required: false
+    default: "latest"
+  github-token:
+    description: "GitHub token used to post PR comments (defaults to the built-in token)"
+    required: false
+    default: "${{ github.token }}"
+  pr-comment:
+    description: "Post recommendations as a PR comment (true/false)"
+    required: false
+    default: "true"
+
+outputs:
+  recommendation-json:
+    description: "JSON array of machine recommendations"
+    value: ${{ steps.recommend.outputs.result }}
+  artifact-url:
+    description: "URL of the uploaded metrics artifact"
+    value: ${{ steps.upload.outputs.artifact-url }}
+  detected-machine:
+    description: "Machine type detected at runtime"
+    value: ${{ steps.recommend.outputs.detected_machine }}
+  suggested-machine:
+    description: "Top recommended machine ID"
+    value: ${{ steps.recommend.outputs.suggested_machine }}
+
+runs:
+  using: composite
+  steps:
+    # ── Download binary ───────────────────────────────────────────────────────
+    - name: Download runright binary
+      id: download
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+
+        VERSION="${{ inputs.version }}"
+        REPO="gbudjeakp/run-right"
+        BIN_DIR="$HOME/.runright/bin"
+        mkdir -p "$BIN_DIR"
+
+        if [[ "$VERSION" == "latest" ]]; then
+          VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+            | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        fi
+
+        TARBALL="runright_${OS}_${ARCH}.tar.gz"
+        URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
+        curl -fsSL "$URL" -o /tmp/runright.tar.gz
+        tar -xzf /tmp/runright.tar.gz -C "$BIN_DIR" runright
+        chmod +x "$BIN_DIR/runright"
+        echo "$BIN_DIR" >> "$GITHUB_PATH"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    # ── Wrapper mode ──────────────────────────────────────────────────────────
+    - name: Start monitor (wrapper mode)
+      if: inputs.run != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ inputs.output-dir }}"
+        runright monitor \
+          --interval "${{ inputs.interval }}" \
+          --export "${{ inputs.export }}" \
+          --output-dir "${{ inputs.output-dir }}" \
+          --job-id "${{ inputs.job-id }}" \
+          --http-url "${{ inputs.http-url }}" &
+        echo $! > /tmp/runright-monitor.pid
+        echo "runright: monitor started (PID $(cat /tmp/runright-monitor.pid))"
+
+    - name: Run wrapped command
+      if: inputs.run != ''
+      shell: bash
+      run: ${{ inputs.run }}
+
+    - name: Stop monitor (wrapper mode)
+      if: inputs.run != ''
+      shell: bash
+      run: |
+        if [[ -f /tmp/runright-monitor.pid ]]; then
+          PID=$(cat /tmp/runright-monitor.pid)
+          kill -TERM "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          rm -f /tmp/runright-monitor.pid
+        fi
+
+    # ── Standalone: start step ────────────────────────────────────────────────
+    - name: Start monitor (standalone mode)
+      if: inputs.step == 'start'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ inputs.output-dir }}"
+        runright monitor \
+          --interval "${{ inputs.interval }}" \
+          --export "${{ inputs.export }}" \
+          --output-dir "${{ inputs.output-dir }}" \
+          --job-id "${{ inputs.job-id }}" \
+          --http-url "${{ inputs.http-url }}" &
+        echo $! > /tmp/runright-monitor.pid
+        echo "runright: monitor started (PID $(cat /tmp/runright-monitor.pid))"
+
+    # ── Standalone: stop step ─────────────────────────────────────────────────
+    - name: Stop monitor (standalone mode)
+      if: inputs.step == 'stop'
+      shell: bash
+      run: |
+        if [[ -f /tmp/runright-monitor.pid ]]; then
+          PID=$(cat /tmp/runright-monitor.pid)
+          kill -TERM "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          rm -f /tmp/runright-monitor.pid
+        fi
+
+    # ── Recommend (runs after stop or after wrapped command) ──────────────────
+    - name: Generate recommendations
+      id: recommend
+      if: inputs.step == 'stop' || inputs.run != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        SUMMARY="${{ inputs.output-dir }}/metrics-summary.json"
+
+        if [[ ! -f "$SUMMARY" ]]; then
+          echo "No metrics-summary.json found at $SUMMARY, skipping recommendations."
+          exit 0
+        fi
+
+        # Generate recommendations as JSON.
+        RESULT=$(runright recommend \
+          --metrics "$SUMMARY" \
+          --format json 2>/dev/null || echo "[]")
+
+        echo "result=$(echo "$RESULT" | tr -d '\n')" >> "$GITHUB_OUTPUT"
+
+        # Extract top recommendation.
+        TOP=$(echo "$RESULT" | python3 -c \
+          "import sys,json; d=json.load(sys.stdin); print(d[0]['machine']['id'] if d else 'unknown')" 2>/dev/null || echo "unknown")
+        echo "suggested_machine=$TOP" >> "$GITHUB_OUTPUT"
+
+        # Extract detected machine.
+        DETECTED=$(python3 -c \
+          "import sys,json; d=json.load(open('$SUMMARY')); m=d.get('detected_machine'); print(m['id'] if m else 'unknown')" 2>/dev/null || echo "unknown")
+        echo "detected_machine=$DETECTED" >> "$GITHUB_OUTPUT"
+
+        # ── Print recommendation table to CI logs (visible inline) ────────────
+        echo ""
+        echo "╔══════════════════════════════════════════════════════╗"
+        echo "║  RunRight — Machine Sizing Recommendation            ║"
+        echo "╚══════════════════════════════════════════════════════╝"
+        runright recommend --metrics "$SUMMARY" --format table 2>/dev/null || true
+        echo ""
+
+        # ── Write markdown summary to the Actions Step Summary tab ───────────
+        runright recommend \
+          --metrics "$SUMMARY" \
+          --format markdown >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+        # ── Build PR comment body (used by the next step) ─────────────────────
+        JOB_LABEL="${{ inputs.job-id }}"
+        MARKER="<!-- runright:${JOB_LABEL} -->"
+        {
+          echo "$MARKER"
+          echo ""
+          echo "### ⚡ RunRight — \`${JOB_LABEL}\`"
+          echo ""
+          runright recommend --metrics "$SUMMARY" --format markdown 2>/dev/null || true
+          echo ""
+          echo "<sub>Powered by [RunRight](https://github.com/sgbudje/runright) · [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>"
+        } > /tmp/runright-pr-comment.md
+
+    # ── PR comment ────────────────────────────────────────────────────────────
+    - name: Post PR comment
+      id: pr-comment
+      if: |
+        (inputs.step == 'stop' || inputs.run != '') &&
+        inputs.pr-comment == 'true' &&
+        github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        COMMENT_FILE: /tmp/runright-pr-comment.md
+        JOB_LABEL: ${{ inputs.job-id }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs')
+          const commentPath = process.env.COMMENT_FILE
+          if (!fs.existsSync(commentPath)) { return }
+
+          const body = fs.readFileSync(commentPath, 'utf8')
+          const marker = `<!-- runright:${process.env.JOB_LABEL} -->`
+
+          // Find an existing RunRight comment for this job so we update instead
+          // of creating a new comment on every push to the PR branch.
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.payload.pull_request.number,
+          })
+          const existing = comments.find(c => c.body.includes(marker))
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            })
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            })
+          }
+
+    # ── Upload artifact ───────────────────────────────────────────────────────
+    - name: Upload metrics artifact
+      id: upload
+      if: (inputs.step == 'stop' || inputs.run != '') && inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: runright-metrics-${{ inputs.job-id }}
+        path: ${{ inputs.output-dir }}/
+        retention-days: 30
+        if-no-files-found: warn

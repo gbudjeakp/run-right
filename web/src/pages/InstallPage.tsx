@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import PageNav from '../components/PageNav'
 import './LandingPage.css'
 import './InstallPage.css'
 
@@ -81,6 +82,9 @@ const NAV = [
     group: 'Infrastructure',
     items: [
       { id: 'kubernetes',     label: 'Kubernetes / Self-Hosted' },
+      { id: 'helm',           label: 'Helm (EKS / any K8s)' },
+      { id: 'terraform-ecs', label: 'Terraform — ECS Fargate' },
+      { id: 'terraform-eks', label: 'Terraform — EKS' },
     ],
   },
   {
@@ -127,18 +131,7 @@ export default function InstallPage() {
     <div className={`lp-root${dark ? ' lp-dark' : ''} ip-root`}>
 
       {/* ── Top nav ── */}
-      <header className="ip-topnav lp-nav">
-        <Link to="/" className="ip-logo">RUNRIGHT</Link>
-        <div className="ip-topnav-right">
-          <Link to="/" className="ip-topnav-link">Home</Link>
-          <a href="https://github.com/gbudjeakp/run-right" target="_blank" rel="noopener noreferrer" className="ip-topnav-link">GitHub</a>
-          <button
-            className="lp-theme-toggle ip-theme-btn"
-            onClick={() => setDark(d => !d)}
-            aria-label={dark ? 'Light mode' : 'Dark mode'}
-          >{dark ? '☀' : '☽'}</button>
-        </div>
-      </header>
+      <PageNav dark={dark} onToggleDark={() => setDark(d => !d)} />
 
       {/* ── Body (sidebar + content) ── */}
       <div className="ip-body">
@@ -164,6 +157,47 @@ export default function InstallPage() {
 
         {/* Main content */}
         <main className="ip-content" ref={contentRef}>
+
+          {/* ── 60-second quick-start banner ─────────────────────────────── */}
+          <div className="ip-quickstart">
+            <div className="ip-qs-header">
+              <span className="ip-qs-badge">60-SECOND INSTALL</span>
+              <span className="ip-qs-sub">Works on any CI runner. No backend required.</span>
+            </div>
+            <div className="ip-qs-tabs">
+              {(['GitHub Actions', 'Bare metal / other CI'] as const).map((tab, i) => (
+                <button
+                  key={tab}
+                  className={`ip-qs-tab${activeId === (i === 0 ? 'github-actions' : 'no-backend') || (i === 0 && !['no-backend','gitlab-ci','jenkins','circleci','bitbucket','kubernetes','self-hosted','http-backend','otlp-export','environment-variables'].includes(activeId)) ? ' active' : ''}`}
+                  onClick={() => {
+                    const target = i === 0 ? 'github-actions' : 'no-backend'
+                    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                >{tab}</button>
+              ))}
+            </div>
+            <div className="ip-qs-code">
+              <span className="ip-qs-comment"># Add to any job in .github/workflows/ci.yml</span>
+              {'\n'}
+              <span className="ip-qs-key">- uses</span>
+              <span className="ip-qs-punct">: </span>
+              <span className="ip-qs-val">gbudjeakp/run-right@v1</span>
+              {'\n'}
+              {'  '}
+              <span className="ip-qs-key">with</span>
+              <span className="ip-qs-punct">:</span>
+              {'\n'}
+              {'    '}
+              <span className="ip-qs-key">run</span>
+              <span className="ip-qs-punct">: </span>
+              <span className="ip-qs-val">make build</span>
+              {'  '}
+              <span className="ip-qs-comment"># ← your command here</span>
+            </div>
+            <p className="ip-qs-result">
+              Recommendations appear in the <strong>Job Summary</strong> tab after the run. No config, no API key, no database.
+            </p>
+          </div>
 
           {/* ── Overview ─────────────────────────────────────────────────── */}
           <section id="overview" className="ip-section">
@@ -400,6 +434,123 @@ build:
     - make build
   after_script:
     - kill \$(cat .pid 2>/dev/null) 2>/dev/null || true`} />
+          </section>
+
+          {/* ── Helm ─────────────────────────────────────────────────────── */}
+          <section id="helm" className="ip-section">
+            <h2 className="ip-h2">Helm — EKS &amp; Any Kubernetes Cluster</h2>
+            <p className="ip-p">
+              The RunRight Helm chart deploys the backend and dashboard onto any Kubernetes
+              cluster — EKS, GKE, AKS, or self-managed. It bundles a PostgreSQL subchart by
+              default, or point it at an existing database with <code>externalDSN</code>.
+            </p>
+
+            <h3 className="ip-h3">Quick install</h3>
+            <CopyBlock label="terminal" code={`# From the repo root
+helm install runright ./helm/runright \\
+  --namespace runright --create-namespace \\
+  --set config.apiKey=your-secret-key`} />
+
+            <h3 className="ip-h3">With an existing Postgres database</h3>
+            <CopyBlock label="terminal" code={`helm install runright ./helm/runright \\
+  --namespace runright --create-namespace \\
+  --set postgresql.enabled=false \\
+  --set externalDSN="postgres://user:pass@host:5432/runright?sslmode=require" \\
+  --set config.apiKey=your-secret-key`} />
+
+            <h3 className="ip-h3">With an Ingress (EKS ALB controller)</h3>
+            <CopyBlock label="values-eks.yaml" code={`ingress:
+  enabled: true
+  className: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internal
+  hosts:
+    - host: runright.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix`} />
+            <CopyBlock label="terminal" code={`helm install runright ./helm/runright \\
+  --namespace runright --create-namespace \\
+  -f values-eks.yaml \\
+  --set postgresql.enabled=false \\
+  --set externalDSN="$DSN"`} />
+
+            <Callout type="info">
+              The Helm chart works identically on GKE (use <code>nginx</code> or <code>gce</code> ingress class)
+              and AKS (use <code>azure/application-gateway</code> or <code>nginx</code>).
+            </Callout>
+
+            <h3 className="ip-h3">K8s resource recommendations</h3>
+            <p className="ip-p">
+              Every recommendation in the RunRight dashboard now includes suggested Kubernetes
+              resource requests and limits based on observed p95 usage:
+            </p>
+            <CopyBlock label="example recommendation output (JSON)" code={`{
+  "machine": { "id": "t4g.small", ... },
+  "kubernetes_resources": {
+    "cpu_request":    "1200m",
+    "cpu_limit":      "2000m",
+    "memory_request": "2Gi",
+    "memory_limit":   "3Gi"
+  }
+}`} />
+            <p className="ip-p">
+              Requests are set to p95 usage with headroom. Limits are set to peak usage with
+              a safety margin — enough to absorb a spike without triggering an OOM kill or
+              CPU throttle.
+            </p>
+          </section>
+
+          {/* ── Terraform ECS ────────────────────────────────────────────── */}
+          <section id="terraform-ecs" className="ip-section">
+            <h2 className="ip-h2">Terraform — AWS ECS Fargate</h2>
+            <p className="ip-p">
+              The <code>terraform/</code> module deploys RunRight on AWS Fargate with RDS
+              PostgreSQL, Secrets Manager for credentials, CloudWatch logging, and an optional
+              ALB target group attachment. All in one <code>terraform apply</code>.
+            </p>
+            <CopyBlock label="terraform/terraform.tfvars" code={`name               = "runright"
+vpc_id             = "vpc-0abc123"
+private_subnet_ids = ["subnet-aaa", "subnet-bbb"]
+allowed_cidrs      = ["10.0.0.0/8"]
+db_password        = "change-me"     # stored in Secrets Manager, not plaintext in state
+api_key            = "rr-secret-key"
+image_tag          = "v1.0.0"`} />
+            <CopyBlock label="terminal" code={`cd terraform
+terraform init
+terraform apply`} />
+            <p className="ip-p">
+              Set <code>create_rds = false</code> and <code>external_dsn</code> to bring your
+              own Postgres (RDS in another account, Aurora, Neon, etc.).
+            </p>
+          </section>
+
+          {/* ── Terraform EKS ────────────────────────────────────────────── */}
+          <section id="terraform-eks" className="ip-section">
+            <h2 className="ip-h2">Terraform — EKS</h2>
+            <p className="ip-p">
+              The <code>terraform/eks/</code> module targets an existing EKS cluster. It
+              provisions an optional RDS instance, creates a Kubernetes namespace and secret,
+              then installs RunRight via the Helm chart using the Terraform Helm provider —
+              so the whole stack is managed in one plan.
+            </p>
+            <CopyBlock label="terraform/eks/terraform.tfvars" code={`cluster_name       = "my-eks-cluster"
+vpc_id             = "vpc-0abc123"
+private_subnet_ids = ["subnet-aaa", "subnet-bbb"]
+eks_node_cidrs     = ["10.0.0.0/8"]
+db_password        = "change-me"
+api_key            = "rr-secret-key"
+ingress_enabled    = true
+ingress_class_name = "alb"
+ingress_hostname   = "runright.internal.example.com"`} />
+            <CopyBlock label="terminal" code={`cd terraform/eks
+terraform init
+terraform apply`} />
+            <Callout type="tip">
+              Set <code>create_rds = false</code> and supply <code>external_dsn</code> to reuse
+              an existing Aurora or RDS cluster shared across your platform services.
+            </Callout>
           </section>
 
           {/* ── Backend Setup ────────────────────────────────────────────── */}

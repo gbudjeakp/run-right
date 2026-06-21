@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import './LandingPage.css'
 import LogoMark from '../components/LogoMark'
+import PageNav from '../components/PageNav'
 
 // ── Feature icons ─────────────────────────────────────────────────
-function IconMetrics({ color = '#B8860B' }: { color?: string }) {
+function IconMetrics({ color = '#C23B22' }: { color?: string }) {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="3" y="13" width="4" height="8" rx=".5" fill={color} opacity=".5" />
@@ -14,7 +16,7 @@ function IconMetrics({ color = '#B8860B' }: { color?: string }) {
   )
 }
 
-function IconCloud({ color = '#B8860B' }: { color?: string }) {
+function IconCloud({ color = '#C23B22' }: { color?: string }) {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M6.5 19a4.5 4.5 0 0 1-.5-9 5.5 5.5 0 0 1 10.8-1.5A4 4 0 1 1 18 19H6.5Z" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
@@ -22,7 +24,7 @@ function IconCloud({ color = '#B8860B' }: { color?: string }) {
   )
 }
 
-function IconExport({ color = '#B8860B' }: { color?: string }) {
+function IconExport({ color = '#C23B22' }: { color?: string }) {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="5" cy="12" r="2" stroke={color} strokeWidth="1.5" />
@@ -34,7 +36,7 @@ function IconExport({ color = '#B8860B' }: { color?: string }) {
   )
 }
 
-function IconServer({ color = '#B8860B' }: { color?: string }) {
+function IconServer({ color = '#C23B22' }: { color?: string }) {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="3" y="4" width="18" height="5" rx="1" stroke={color} strokeWidth="1.5" />
@@ -56,25 +58,6 @@ function GitHubIcon({ size = 18, color = 'currentColor' }: { size?: number; colo
 }
 
 // ── Moon / Sun icons for dark-mode toggle ────────────────────────
-function MoonIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  )
-}
-function SunIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="5" />
-      <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-    </svg>
-  )
-}
-
 interface Props {
   onEnter: () => void
 }
@@ -123,36 +106,64 @@ const S = {
 
   // Hero
   hero: {
-    maxWidth: 860,
+    borderBottom: '1px solid var(--lp-border)',
+  } as React.CSSProperties,
+
+  heroInner: {
+    maxWidth: 1100,
     margin: '0 auto',
-    padding: '90px 60px 80px',
-    textAlign: 'center' as const,
-  },
+    padding: '80px 60px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 72,
+  } as React.CSSProperties,
+
+  heroLeft: {
+    flex: 1,
+    minWidth: 0,
+  } as React.CSSProperties,
+
+  heroRight: {
+    flex: '0 0 320px',
+    background: '#1A0F02',
+    border: '1px solid #3a2510',
+    borderLeft: '3px solid #B8860B',
+    padding: '24px 28px',
+    fontFamily: "'Courier New', monospace",
+    fontSize: 13,
+    color: '#E8C458',
+    lineHeight: 1.8,
+  } as React.CSSProperties,
 
   eyebrow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
     fontFamily: "'Bebas Neue', Impact, sans-serif",
-    fontSize: 13,
+    fontSize: 11,
     letterSpacing: 4,
     color: '#9A7B5A',
+    border: '1px solid var(--lp-border)',
+    padding: '5px 14px',
     marginBottom: 24,
   } as React.CSSProperties,
 
   heroTitle: {
     fontFamily: "'Playfair Display', Georgia, serif",
-    fontSize: 'clamp(42px, 6vw, 68px)',
+    fontSize: 'clamp(36px, 4.5vw, 56px)',
     fontWeight: 900,
     lineHeight: 1.1,
     color: 'var(--lp-text)',
-    marginBottom: 24,
+    marginBottom: 20,
     letterSpacing: '-0.5px',
   } as React.CSSProperties,
 
   heroSub: {
-    fontSize: 20,
+    fontSize: 16,
     color: 'var(--lp-text-mid)',
-    lineHeight: 1.8,
-    maxWidth: 580,
-    margin: '0 auto 40px',
+    lineHeight: 1.75,
+    maxWidth: 440,
+    margin: '0 0 32px',
     fontWeight: 400,
   } as React.CSSProperties,
 
@@ -161,13 +172,12 @@ const S = {
     background: '#C23B22',
     color: '#FBF0DC',
     border: 'none',
-    padding: '15px 44px',
+    padding: '13px 38px',
     fontFamily: "'Bebas Neue', Impact, sans-serif",
-    fontSize: 18,
+    fontSize: 15,
     letterSpacing: 3,
     cursor: 'pointer',
-    boxShadow: '4px 4px 0 rgba(92,58,30,.2)',
-    transition: 'background .15s, transform .08s, box-shadow .08s',
+    transition: 'background .15s, transform .08s',
     textDecoration: 'none',
   } as React.CSSProperties,
 
@@ -537,82 +547,195 @@ function CopyBlock({ label, code }: { label: string; code: string }) {
   )
 }
 
+// ── Savings Calculator ────────────────────────────────────────────
+const CALC_MACHINES = [
+  { id: 'gh4',  label: 'GitHub Actions — ubuntu-latest (4 vCPU)',    pricePerMin: 0.008,    savingsPct: 0.20 },
+  { id: 'gh8',  label: 'GitHub Actions — 8-core runner',              pricePerMin: 0.016,    savingsPct: 0.38 },
+  { id: 'gh16', label: 'GitHub Actions — 16-core runner',             pricePerMin: 0.064,    savingsPct: 0.52 },
+  { id: 'c5xl', label: 'Self-hosted EC2 c5.xlarge (4c / 8 GB)',       pricePerMin: 0.00283,  savingsPct: 0.42 },
+  { id: 'c52x', label: 'Self-hosted EC2 c5.2xlarge (8c / 16 GB)',     pricePerMin: 0.00567,  savingsPct: 0.52 },
+  { id: 'm5xl', label: 'Self-hosted EC2 m5.xlarge (4c / 16 GB)',      pricePerMin: 0.00320,  savingsPct: 0.36 },
+  { id: 'm52x', label: 'Self-hosted EC2 m5.2xlarge (8c / 32 GB)',     pricePerMin: 0.00640,  savingsPct: 0.50 },
+  { id: 'n2s2', label: 'Self-hosted GCP n2-standard-2 (2c / 8 GB)',   pricePerMin: 0.00163,  savingsPct: 0.30 },
+  { id: 'n2s4', label: 'Self-hosted GCP n2-standard-4 (4c / 16 GB)', pricePerMin: 0.00325,  savingsPct: 0.40 },
+  { id: 'n2s8', label: 'Self-hosted GCP n2-standard-8 (8c / 32 GB)', pricePerMin: 0.00651,  savingsPct: 0.50 },
+]
+
+function SavingsCalc() {
+  const [machineIdx, setMachineIdx] = useState(0)
+  const [duration, setDuration] = useState(12)
+  const [jobsPerDay, setJobsPerDay] = useState(80)
+
+  const m = CALC_MACHINES[machineIdx]
+  const currentMonthly = m.pricePerMin * duration * jobsPerDay * 30
+  const savings = currentMonthly * m.savingsPct
+  const recommended = currentMonthly - savings
+
+  const fmt = (n: number) =>
+    n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`
+
+  return (
+    <div style={{ borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '72px 60px' }} className="lp-section">
+
+        <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 5, color: '#9A7B5A', margin: '0 0 12px', textAlign: 'center' }}>
+          SAVINGS CALCULATOR
+        </p>
+        <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(28px, 3.5vw, 40px)', fontWeight: 900, color: 'var(--lp-text)', textAlign: 'center', marginBottom: 8, letterSpacing: '-0.5px' }}>
+          How much could you save?
+        </h2>
+        <p style={{ textAlign: 'center', color: 'var(--lp-text-mid)', fontSize: 15, marginBottom: 48 }}>
+          Based on typical CI job utilisation (p95 CPU ~30%, p95 RAM ~40%).
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'start' }} className="lp-calc-grid">
+
+          {/* Controls */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+
+            <div>
+              <label style={{ display: 'block', fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 3, color: '#9A7B5A', marginBottom: 10 }}>
+                CURRENT MACHINE
+              </label>
+              <select
+                value={machineIdx}
+                onChange={e => setMachineIdx(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  background: 'var(--lp-paper)',
+                  border: '1.5px solid var(--lp-border)',
+                  color: 'var(--lp-text)',
+                  padding: '10px 14px',
+                  fontFamily: "'Lato', system-ui, sans-serif",
+                  fontSize: 14,
+                  appearance: 'none' as const,
+                  cursor: 'pointer',
+                }}
+              >
+                {CALC_MACHINES.map((mc, i) => (
+                  <option key={mc.id} value={i}>{mc.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 3, color: '#9A7B5A', marginBottom: 10 }}>
+                <span>AVG JOB DURATION</span>
+                <span style={{ color: 'var(--lp-text)' }}>{duration} min</span>
+              </label>
+              <input type="range" min={1} max={60} value={duration} onChange={e => setDuration(Number(e.target.value))}
+                style={{ width: '100%', accentColor: '#C23B22', cursor: 'pointer' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-light)', marginTop: 4 }}>
+                <span>1 min</span><span>60 min</span>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 3, color: '#9A7B5A', marginBottom: 10 }}>
+                <span>JOBS PER DAY</span>
+                <span style={{ color: 'var(--lp-text)' }}>{jobsPerDay}</span>
+              </label>
+              <input type="range" min={1} max={500} value={jobsPerDay} onChange={e => setJobsPerDay(Number(e.target.value))}
+                style={{ width: '100%', accentColor: '#C23B22', cursor: 'pointer' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-light)', marginTop: 4 }}>
+                <span>1</span><span>500</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Output */}
+          <div style={{ background: 'var(--lp-paper)', border: '1.5px solid var(--lp-border)', padding: '32px 28px', boxShadow: '4px 4px 0 rgba(44,26,14,.08)' }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid var(--lp-border)' }}>
+              <div>
+                <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#9A7B5A', margin: '0 0 6px' }}>CURRENT / MO</p>
+                <p style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: 32, color: 'var(--lp-text)', margin: 0, lineHeight: 1 }}>{fmt(currentMonthly)}</p>
+              </div>
+              <div>
+                <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#C23B22', margin: '0 0 6px' }}>SAVINGS / MO</p>
+                <p style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: 32, color: '#C23B22', margin: 0, lineHeight: 1 }}>{fmt(savings)}</p>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#9A7B5A', margin: '0 0 6px' }}>AFTER RUNRIGHT / MO</p>
+              <p style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: 28, color: 'var(--lp-text)', margin: '0 0 4px', lineHeight: 1 }}>{fmt(recommended)}</p>
+              <p style={{ fontSize: 12, color: '#9A7B5A', margin: 0 }}>~{Math.round(m.savingsPct * 100)}% reduction on right-sized machines</p>
+            </div>
+
+            <div style={{ background: 'var(--lp-paper-alt)', padding: '12px 14px', borderLeft: '3px solid #C23B22', fontSize: 13, color: 'var(--lp-text-mid)', lineHeight: 1.6 }}>
+              Estimates use p95 usage at ~30% CPU / ~40% RAM headroom. Actual savings vary by workload.
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LandingPage({ onEnter }: Props) {
   const [dark, setDark] = useState(false)
   return (
     <div style={S.page} className={`lp-root${dark ? ' lp-dark' : ''}`}>
 
       {/* Nav */}
-      <nav style={S.nav} aria-label="Main navigation" className="lp-nav">
-        <div style={S.navLogo}>
-          <LogoMark size={20} color="#2C1A0E" />
-          <span>RUNRIGHT</span>
-        </div>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <a
-            href="/install"
-            style={{
-              ...S.navBtn,
-              textDecoration: 'none',
-            }}
-          >
-            Install
-          </a>
-          <a
-            href="https://github.com/gbudjeakp/run-right"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="lp-nav-github"
-            style={{
-              ...S.navBtn,
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-            }}
-          >
-            <GitHubIcon size={15} color="currentColor" />
-            GitHub
-          </a>
-          <button
-            className="lp-signin-btn"
-            style={S.navBtn}
-            onClick={onEnter}
-          >
-            Sign In
-          </button>
-          <button
-            onClick={() => setDark(d => !d)}
-            className="lp-theme-toggle"
-            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {dark ? <SunIcon size={16} /> : <MoonIcon size={16} />}
-          </button>
-        </div>
-      </nav>
+      <PageNav dark={dark} onToggleDark={() => setDark(d => !d)} onSignIn={onEnter} />
 
       {/* Hero */}
       <section style={S.hero} aria-label="Hero" className="lp-hero">
-        <p style={S.eyebrow}>OPEN SOURCE · FREE · AWS &amp; GCP</p>
-        <h1 style={S.heroTitle}>
-          Stop guessing at<br />
-          <em>CI machine sizes.</em>
-        </h1>
-        <p style={S.heroSub}>
-          Teams run the same job dozens of times before anyone stops to audit which
-          machine is actually right for it. RunRight does that audit automatically,
-          every run, building a history so your recommendations get sharper over time.
-          As your job grows, RunRight grows with it.
-        </p>
-        <button
-          style={S.heroBtn}
-          onClick={onEnter}
-          aria-label="Open RunRight dashboard"
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#9B2D17'; (e.currentTarget as HTMLElement).style.transform = 'translate(2px,2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '2px 2px 0 rgba(92,58,30,.2)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#C23B22'; (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = '4px 4px 0 rgba(92,58,30,.2)' }}
-        >
-          Open Dashboard →
-        </button>
+        <div style={S.heroInner} className="lp-hero-inner">
+
+          {/* Left — copy */}
+          <div style={S.heroLeft}>
+            <p style={S.eyebrow}>OPEN SOURCE · FREE · AWS &amp; GCP</p>
+            <h1 style={S.heroTitle}>
+              Stop guessing at<br />
+              <em>CI machine sizes.</em>
+            </h1>
+            <p style={S.heroSub}>
+              RunRight monitors every CI job and maps your actual p95 usage to the
+              right AWS or GCP instance type — automatically, on every run.
+            </p>
+            <Link
+              to="/install"
+              style={S.heroBtn}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#9B2D17'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#C23B22'; (e.currentTarget as HTMLElement).style.transform = 'none' }}
+            >
+              Install →
+            </Link>
+          </div>
+
+          {/* Right — recommendation visual */}
+          <div style={S.heroRight} className="lp-hero-visual">
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#C4A882', marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid #4a2e18' }}>
+              RUNRIGHT · build-and-test
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ color: '#C4A882' }}>p95 cpu</span>
+              <span>1.2 cores</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid #4a2e18' }}>
+              <span style={{ color: '#C4A882' }}>p95 ram</span>
+              <span>1.8 GB</span>
+            </div>
+            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #4a2e18' }}>
+              <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#C4A882', marginBottom: 6 }}>CURRENT</div>
+              <div style={{ color: '#FBF0DC' }}>c5.xlarge</div>
+              <div style={{ fontSize: 11, color: '#C4A882' }}>4 vCPU · 8 GB · $0.0194/min</div>
+            </div>
+            <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid #4a2e18' }}>
+              <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#C23B22', marginBottom: 6 }}>RECOMMENDED ↓ 58%</div>
+              <div style={{ color: '#FBF0DC', fontWeight: 700 }}>t4g.small</div>
+              <div style={{ fontSize: 11, color: '#C4A882' }}>2 vCPU · 2 GB · $0.0042/min</div>
+            </div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 10, letterSpacing: 3, color: '#C4A882', marginBottom: 4 }}>MONTHLY SAVINGS</div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 900, color: '#C23B22', letterSpacing: '-0.5px', lineHeight: 1 }}>~$18.40</div>
+          </div>
+
+        </div>
       </section>
 
       {/* Social proof bar */}
@@ -626,7 +749,7 @@ export default function LandingPage({ onEnter }: Props) {
         gap: 48,
         flexWrap: 'wrap' as const,
       }} className="lp-proof-bar">
-        {['160+ AWS instances', '60+ GCP instances', 'Open Source (MIT)', 'Self-Hosted'].map(s => (
+        {['160+ AWS instances', '60+ GCP instances', 'Open Source', 'Self-Hosted'].map(s => (
           <span key={s} style={{
             fontFamily: "'Bebas Neue', Impact, sans-serif",
             fontSize: 12,
@@ -646,7 +769,9 @@ export default function LandingPage({ onEnter }: Props) {
       </div>
 
       {/* How it works */}
-      <div style={S.section} className="lp-section">
+      <div style={{ borderTop: '1px solid var(--lp-border)', ...S.section }} className="lp-section">
+        <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 4, color: '#9A7B5A', textAlign: 'center' as const, marginBottom: 12 }}>HOW IT WORKS</p>
+        <h2 style={{ ...S.sectionTitle, marginBottom: 48 }}>Three steps. No code changes.</h2>
         <div style={S.steps} className="lp-steps">
           <div style={S.step}>
             <div style={S.stepNum}>01</div>
@@ -799,73 +924,77 @@ env:
         </div>
       </div>
 
-      {/* Free Forever / Pricing */}
-      <div style={{ ...S.section, textAlign: 'center' as const, paddingBottom: 80 }} className="lp-section">
-        <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 4, color: '#9A7B5A', marginBottom: 12 }}>PRICING</p>
-        <h2 style={S.sectionTitle}>Free Forever. Self-Hosted.</h2>
-        <p style={{ ...S.sectionSub, marginBottom: 48 }}>
-          RunRight is MIT-licensed and runs entirely on your infrastructure. No seats, no usage caps, no tracking.
+      {/* Compare teaser */}
+      <div style={{ borderTop: '1px solid var(--lp-border)', padding: '48px 60px', textAlign: 'center' as const }}>
+        <p style={{ fontSize: 15, color: 'var(--lp-text-mid)', margin: '0 0 14px', lineHeight: 1.7 }}>
+          How does RunRight compare to Datadog, Grafana, Sentry, and AWS Cost Tools?
         </p>
-        <div style={{
-          maxWidth: 440,
-          margin: '0 auto',
-          background: 'var(--lp-paper)',
-          border: '2px solid var(--lp-text)',
-          padding: '44px 52px',
-          boxShadow: '6px 6px 0 rgba(44,26,14,.12)',
-          textAlign: 'left' as const,
-        }} className="lp-pricing-card">
-          <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 12, letterSpacing: 4, color: '#9A7B5A', marginBottom: 6 }}>SELF-HOSTED</div>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 900, fontSize: 54, color: 'var(--lp-text)', lineHeight: 1 }}>$0</div>
-          <div style={{ fontFamily: 'Lato, sans-serif', fontSize: 13, color: '#9A7B5A', marginBottom: 36 }}>per month, per seat, per run forever</div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 36px' }}>
-            {[
-              'Unlimited job runs and history',
-              'Unlimited team members',
-              'Full AWS + GCP catalog (160+ types)',
-              'All CI platform integrations',
-              'Your data stays on your servers',
-              'MIT license, modify anything',
-            ].map(item => (
-              <li key={item} style={{
-                fontFamily: 'Lato, sans-serif',
-                fontSize: 15,
-                color: 'var(--lp-text)',
-                padding: '9px 0',
-                borderBottom: '1px solid var(--lp-border)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-              }}>
-                <span style={{ color: '#B8860B', fontWeight: 700, fontSize: 16, flexShrink: 0 }}>+</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-          <a
-            href="https://github.com/gbudjeakp/run-right"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              background: '#2C1A0E',
-              color: '#FBF0DC',
-              padding: '13px 32px',
-              fontFamily: "'Bebas Neue', Impact, sans-serif",
-              fontSize: 15,
-              letterSpacing: 2,
-              textDecoration: 'none',
-              boxShadow: '3px 3px 0 rgba(92,58,30,.2)',
-              transition: 'background .15s',
-            }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#C23B22'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#2C1A0E'}
-          >
-            <GitHubIcon size={16} color="currentColor" />
-            Star on GitHub
-          </a>
+        <Link
+          to="/compare"
+          style={{
+            fontFamily: "'Bebas Neue', Impact, sans-serif",
+            fontSize: 13,
+            letterSpacing: 2,
+            color: 'var(--lp-text)',
+            textDecoration: 'none',
+            borderBottom: '1px solid var(--lp-border)',
+            paddingBottom: 2,
+          }}
+        >
+          See the full comparison →
+        </Link>
+      </div>
+
+      {/* Savings Calculator */}
+      <SavingsCalc />
+
+      {/* Free Forever / Pricing */}
+      <div style={{ background: 'var(--lp-dark-strip)', padding: '52px 60px', textAlign: 'center' as const }}>
+        <p style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 12, letterSpacing: 4, color: 'rgba(251,240,220,.4)', margin: '0 0 12px' }}>PRICING</p>
+        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 900, fontSize: 'clamp(36px, 5vw, 52px)', color: '#FBF0DC', lineHeight: 1, marginBottom: 14 }}>It's free.</div>
+        <p style={{ fontSize: 15, color: 'rgba(251,240,220,.6)', margin: '0 0 28px', lineHeight: 1.7 }}>No seats, no usage caps, no SaaS. Self-hosted on your infrastructure.</p>
+        <Link
+          to="/pricing"
+          style={{
+            fontFamily: "'Bebas Neue', Impact, sans-serif",
+            fontSize: 13,
+            letterSpacing: 2,
+            color: '#FBF0DC',
+            textDecoration: 'none',
+            borderBottom: '1px solid rgba(251,240,220,.3)',
+            paddingBottom: 2,
+          }}
+        >
+          See full pricing →
+        </Link>
+      </div>
+
+      {/* FAQ */}
+      <div style={{ ...S.section, paddingTop: 64, paddingBottom: 64 }} className="lp-section">
+        <h2 style={{ ...S.sectionTitle, marginBottom: 36 }}>Quick answers</h2>
+        <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column' as const, gap: 0 }}>
+          {[
+            {
+              q: 'Does RunRight slow down my builds?',
+              a: 'No. It polls /proc every 5s as a background sidecar. Under 5 MB RSS, under 0.1% CPU on the sampler. Your build time is not affected.',
+            },
+            {
+              q: 'Do I need to change my application code?',
+              a: 'No. RunRight wraps your existing CI step. No SDK, no annotations, no config file.',
+            },
+            {
+              q: 'I already use Datadog. Do I need the RunRight backend?',
+              a: 'No. Use --export otlp with OTEL_EXPORTER_OTLP_ENDPOINT pointing at your existing collector. The backend and Postgres are only needed for the self-hosted RunRight dashboard.',
+            },
+          ].map((item, i, arr) => (
+            <div key={item.q} style={{
+              padding: '22px 0',
+              borderBottom: i < arr.length - 1 ? '1px solid var(--lp-border)' : 'none',
+            }}>
+              <div style={{ fontFamily: "'Lato', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--lp-text)', marginBottom: 6 }}>{item.q}</div>
+              <p style={{ fontSize: 14, color: 'var(--lp-text-mid)', lineHeight: 1.8, margin: 0 }}>{item.a}</p>
+            </div>
+          ))}
         </div>
       </div>
 

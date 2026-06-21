@@ -1,8 +1,8 @@
 name: Refresh Machine Catalog
 on:
-  schedule:
-    - cron: "0 6 1,15 * *"   # Runs on the 1st and 15th of every month at 06:00 UTC
-  workflow_dispatch:          # Allow manual trigger
+  # schedule:
+  #   - cron: "0 6 1,15 * *"   # Runs on the 1st and 15th of every month at 06:00 UTC
+  workflow_dispatch:          # Manual trigger only
 
 permissions:
   contents: write

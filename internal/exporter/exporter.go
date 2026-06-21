@@ -32,6 +32,7 @@ const (
 	BackendOTLP       Backend = "otlp"
 	BackendPrometheus Backend = "prometheus"
 	BackendHTTP       Backend = "http"
+	BackendSlack      Backend = "slack"
 )
 
 // ParseBackends parses a comma-separated list of backend names.
@@ -40,7 +41,7 @@ func ParseBackends(s string) []Backend {
 	for _, part := range strings.Split(s, ",") {
 		part = strings.TrimSpace(strings.ToLower(part))
 		switch Backend(part) {
-		case BackendFile, BackendOTLP, BackendPrometheus, BackendHTTP:
+		case BackendFile, BackendOTLP, BackendPrometheus, BackendHTTP, BackendSlack:
 			out = append(out, Backend(part))
 		}
 	}
@@ -52,20 +53,22 @@ func ParseBackends(s string) []Backend {
 
 // Manager holds active OTEL providers for configured backends.
 type Manager struct {
-	backends  []Backend
-	provider  *sdkmetric.MeterProvider
-	meter     otelmetric.Meter
-	promPort  int
-	httpURL   string
-	promLn    net.Listener
+	backends     []Backend
+	provider     *sdkmetric.MeterProvider
+	meter        otelmetric.Meter
+	promPort     int
+	httpURL      string
+	slackWebhook string
+	promLn       net.Listener
 }
 
 // New initialises the export manager. Call Shutdown when done.
-func New(ctx context.Context, backends []Backend, promPort int, httpURL string) (*Manager, error) {
+func New(ctx context.Context, backends []Backend, promPort int, httpURL string, slackWebhook string) (*Manager, error) {
 	m := &Manager{
-		backends: backends,
-		promPort: promPort,
-		httpURL:  httpURL,
+		backends:     backends,
+		promPort:     promPort,
+		httpURL:      httpURL,
+		slackWebhook: slackWebhook,
 	}
 
 	var readers []sdkmetric.Reader
@@ -149,38 +152,50 @@ func (m *Manager) RecordSnapshot(ctx context.Context, snap types.MetricSnapshot)
 // the agent is killed before the job finishes.
 func (m *Manager) PublishSummary(ctx context.Context, summary types.MetricsSummary, recs []types.Recommendation) error {
 	for _, b := range m.backends {
-		if b != BackendHTTP {
-			continue
+		switch b {
+		case BackendHTTP:
+			if err := m.publishHTTP(ctx, summary, recs); err != nil {
+				return err
+			}
+		case BackendSlack:
+			if err := m.postSlack(ctx, summary, recs); err != nil {
+				return err
+			}
 		}
-		if m.httpURL == "" {
-			return fmt.Errorf("--http-url is required for the http exporter")
-		}
-		payload := struct {
-			Summary         types.MetricsSummary   `json:"summary"`
-			Recommendations []types.Recommendation `json:"recommendations"`
-		}{summary, recs}
-		body, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		apiKey := os.Getenv("RUNRIGHT_API_KEY")
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.httpURL+"/api/v1/jobs", bytes.NewReader(body))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		client := &http.Client{Timeout: 15 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode >= 300 {
-			return fmt.Errorf("http backend returned %d", resp.StatusCode)
-		}
+	}
+	return nil
+}
+
+// publishHTTP POSTs the summary and recommendations to the HTTP backend.
+func (m *Manager) publishHTTP(ctx context.Context, summary types.MetricsSummary, recs []types.Recommendation) error {
+	if m.httpURL == "" {
+		return fmt.Errorf("--http-url is required for the http exporter")
+	}
+	payload := struct {
+		Summary         types.MetricsSummary   `json:"summary"`
+		Recommendations []types.Recommendation `json:"recommendations"`
+	}{summary, recs}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	apiKey := os.Getenv("RUNRIGHT_API_KEY")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.httpURL+"/api/v1/jobs", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("http backend returned %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -193,4 +208,72 @@ func (m *Manager) Shutdown(ctx context.Context) {
 	if m.promLn != nil {
 		_ = m.promLn.Close()
 	}
+}
+
+// postSlack sends a concise recommendation digest to a Slack incoming webhook.
+// Only fires for completed summaries with at least one cheaper recommendation.
+func (m *Manager) postSlack(ctx context.Context, summary types.MetricsSummary, recs []types.Recommendation) error {
+	if m.slackWebhook == "" {
+		return fmt.Errorf("--slack-webhook is required for the slack exporter")
+	}
+	if summary.Status != "completed" {
+		return nil // only post on job completion, not heartbeats
+	}
+
+	// Find the best cheaper recommendation.
+	var best *types.Recommendation
+	for i := range recs {
+		if recs[i].CostDeltaPercent < 0 {
+			if best == nil || recs[i].CostDeltaPercent < best.CostDeltaPercent {
+				best = &recs[i]
+			}
+		}
+	}
+	if best == nil {
+		return nil // nothing to report — job is already right-sized
+	}
+
+	savingsPct := -best.CostDeltaPercent
+	monthlyDelta := best.CurrentMonthly - best.EstimatedMonthly
+
+	text := fmt.Sprintf(
+		":chart_with_downwards_trend: *RunRight — `%s`*\n"+
+			">*Current:* `%s`   *Recommended:* `%s`\n"+
+			">*Savings:* ~$%.2f/mo (%.0f%% cheaper)\n"+
+			">*Required:* %d vCPU · %.1f GiB RAM (p95 with headroom)",
+		summary.JobID,
+		func() string {
+			if summary.DetectedMachine != nil {
+				return summary.DetectedMachine.ID
+			}
+			return "unknown"
+		}(),
+		best.Machine.ID,
+		monthlyDelta,
+		savingsPct,
+		best.RequiredVCPUs,
+		best.RequiredMemoryGiB,
+	)
+
+	payload := map[string]string{"text": text}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.slackWebhook, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("slack webhook returned %d", resp.StatusCode)
+	}
+	return nil
 }

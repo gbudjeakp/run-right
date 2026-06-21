@@ -69,20 +69,27 @@ var (
 	monitorJobID     string
 	monitorPromPort  int
 	monitorHTTPURL   string
+	monitorSlackURL  string
 )
 
 func init() {
 	monitorCmd.Flags().DurationVar(&monitorDuration, "duration", 0, "Stop after this duration (0 = run until SIGTERM/SIGINT)")
 	monitorCmd.Flags().DurationVar(&monitorInterval, "interval", 5*time.Second, "Sampling interval")
-	monitorCmd.Flags().StringVar(&monitorExport, "export", "file", "Comma-separated export backends: file,otlp,prometheus,http")
+	monitorCmd.Flags().StringVar(&monitorExport, "export", "file", "Comma-separated export backends: file,otlp,prometheus,http,slack")
 	monitorCmd.Flags().StringVar(&monitorOutputDir, "output-dir", ".", "Directory for file-based output")
 	monitorCmd.Flags().StringVar(&monitorJobID, "job-id", "", "Job identifier (defaults to a timestamp-based ID)")
 	monitorCmd.Flags().IntVar(&monitorPromPort, "prometheus-port", 9090, "Port for Prometheus /metrics endpoint")
 	monitorCmd.Flags().StringVar(&monitorHTTPURL, "http-url", "", "Base URL of runright backend for http export")
+	monitorCmd.Flags().StringVar(&monitorSlackURL, "slack-webhook", "", "Slack incoming webhook URL for slack export (or set RUNRIGHT_SLACK_WEBHOOK)")
 }
 
 func runMonitor(_ *cobra.Command, _ []string) error {
 	backends := exporter.ParseBackends(monitorExport)
+
+	// Allow slack webhook via env var as fallback.
+	if monitorSlackURL == "" {
+		monitorSlackURL = os.Getenv("RUNRIGHT_SLACK_WEBHOOK")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	if monitorDuration > 0 {
@@ -98,7 +105,7 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 		cancel()
 	}()
 
-	mgr, err := exporter.New(ctx, backends, monitorPromPort, monitorHTTPURL)
+	mgr, err := exporter.New(ctx, backends, monitorPromPort, monitorHTTPURL, monitorSlackURL)
 	if err != nil {
 		return fmt.Errorf("exporter: %w", err)
 	}

@@ -82,14 +82,24 @@ const (
 	TierMoreHeadroom RecommendationTier = "more-headroom"
 )
 
+// KubernetesResources contains suggested resource requests and limits for
+// a Kubernetes runner pod based on observed p95 usage.
+type KubernetesResources struct {
+	CPURequest    string `json:"cpu_request"`    // e.g. "1200m"
+	CPULimit      string `json:"cpu_limit"`      // e.g. "2000m"
+	MemoryRequest string `json:"memory_request"` // e.g. "2Gi"
+	MemoryLimit   string `json:"memory_limit"`   // e.g. "3Gi"
+}
+
 // Recommendation is a single machine type suggestion with cost and reasoning.
 type Recommendation struct {
-	Machine            MachineType        `json:"machine"`
-	Tier               RecommendationTier `json:"tier"`
-	EstimatedMonthly   float64            `json:"estimated_monthly_usd"`
-	CurrentMonthly     float64            `json:"current_monthly_usd"`
-	CostDeltaPercent   float64            `json:"cost_delta_percent"`
-	RequiredVCPUs      int                `json:"required_vcpus"`
-	RequiredMemoryGiB  float64            `json:"required_memory_gib"`
-	Reasoning          string             `json:"reasoning"`
+	Machine              MachineType          `json:"machine"`
+	Tier                 RecommendationTier   `json:"tier"`
+	EstimatedMonthly     float64              `json:"estimated_monthly_usd"`
+	CurrentMonthly       float64              `json:"current_monthly_usd"`
+	CostDeltaPercent     float64              `json:"cost_delta_percent"`
+	RequiredVCPUs        int                  `json:"required_vcpus"`
+	RequiredMemoryGiB    float64              `json:"required_memory_gib"`
+	Reasoning            string               `json:"reasoning"`
+	KubernetesResources  *KubernetesResources `json:"kubernetes_resources,omitempty"`
 }

@@ -201,6 +201,87 @@
   padding: 1px 5px;
 }
 
+/* ── 60-second quickstart banner ───────────────────────────────────────────── */
+.ip-quickstart {
+  background: #1A0F02;
+  border: 1px solid #3a2510;
+  border-left: 3px solid #B8860B;
+  padding: 28px 32px;
+  margin-bottom: 40px;
+}
+
+.ip-qs-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.ip-qs-badge {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #B8860B;
+  background: rgba(184,134,11,.12);
+  border: 1px solid rgba(184,134,11,.3);
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.ip-qs-sub {
+  font-size: 13px;
+  color: #C4A882;
+}
+
+.ip-qs-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  border-bottom: 1px solid #3a2510;
+}
+
+.ip-qs-tab {
+  background: none;
+  border: none;
+  color: #9A7B5A;
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  padding: 7px 16px 7px 0;
+  cursor: pointer;
+  transition: color .12s;
+  margin-right: 20px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.ip-qs-tab.active,
+.ip-qs-tab:hover { color: #E8C458; border-bottom-color: #B8860B; }
+
+.ip-qs-code {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 2;
+  padding: 16px 0 8px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.ip-qs-key   { color: #C4A882; }
+.ip-qs-val   { color: #E8C458; }
+.ip-qs-punct { color: #9A7B5A; }
+.ip-qs-comment { color: #5A4030; }
+
+.ip-qs-result {
+  font-size: 13px;
+  color: #9A7B5A;
+  margin: 8px 0 0;
+  line-height: 1.6;
+  border-top: 1px solid #3a2510;
+  padding-top: 12px;
+}
+.ip-qs-result strong { color: #C4A882; font-weight: 600; }
+
 /* ── Overview grid ─────────────────────────────────────────────────────────── */
 .ip-overview-grid {
   display: grid;

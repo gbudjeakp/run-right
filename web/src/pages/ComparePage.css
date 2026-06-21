@@ -1,0 +1,272 @@
+/* ── Root ─────────────────────────────────────────────────────────────────── */
+.cp-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: 'Lato', system-ui, sans-serif;
+}
+
+/* ── Nav ──────────────────────────────────────────────────────────────────── */
+.cp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 48px;
+  height: 56px;
+  border-bottom: 1px solid var(--lp-border);
+  background: var(--lp-bg);
+}
+
+.cp-logo {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: var(--lp-text);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.cp-nav-link {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--lp-text-mid);
+  text-decoration: none;
+  transition: color .12s;
+}
+.cp-nav-link:hover { color: var(--lp-text); }
+.cp-nav-link.active { color: var(--lp-text); }
+
+.cp-signin-btn {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #FBF0DC;
+  background: #2C1A0E;
+  border: 1.5px solid #2C1A0E;
+  padding: 7px 18px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .15s;
+}
+.cp-signin-btn:hover { background: #C23B22; border-color: #C23B22; }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.cp-hero {
+  text-align: center;
+  padding: 72px 48px 56px;
+  border-bottom: 1px solid var(--lp-border);
+}
+
+.cp-eyebrow {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 5px;
+  color: #9A7B5A;
+  margin: 0 0 20px;
+}
+
+.cp-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 900;
+  color: var(--lp-text);
+  line-height: 1.1;
+  margin: 0 0 20px;
+  letter-spacing: -0.5px;
+}
+
+.cp-sub {
+  font-size: 17px;
+  color: var(--lp-text-mid);
+  max-width: 560px;
+  margin: 0 auto;
+  line-height: 1.8;
+}
+
+.cp-sub em { font-style: italic; color: var(--lp-text); }
+
+/* ── Content ──────────────────────────────────────────────────────────────── */
+.cp-content {
+  flex: 1;
+  max-width: 1000px;
+  width: 100%;
+  margin: 72px auto;
+  padding: 0 80px;
+}
+
+/* ── Table ────────────────────────────────────────────────────────────────── */
+.cp-table-scroll {
+  overflow-x: auto;
+  margin-bottom: 40px;
+}
+
+.cp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.cp-table thead th {
+  padding: 10px 18px;
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-align: center;
+  white-space: pre;
+  border-bottom: 2px solid var(--lp-border);
+  background: transparent;
+}
+
+.cp-table thead th:first-child {
+  text-align: left;
+  padding-left: 12px;
+  color: #9A7B5A;
+  border-bottom-color: var(--lp-border);
+  white-space: nowrap;
+}
+
+.cp-table thead th.col-rr {
+  color: #C23B22;
+  border-bottom-color: #C23B22;
+  background: rgba(194, 59, 34, .05);
+}
+
+.cp-table tbody tr:nth-child(even) {
+  background: var(--lp-paper);
+}
+
+.cp-table tbody tr {
+  transition: background .12s;
+}
+.cp-table tbody tr:hover {
+  background: rgba(44, 26, 14, .06) !important;
+}
+.lp-root.lp-dark .cp-table tbody tr:hover {
+  background: rgba(251, 240, 220, .08) !important;
+}
+
+.cp-table tbody td {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--lp-border);
+  text-align: center;
+  color: var(--lp-border);
+  font-size: 15px;
+}
+
+.cp-table tbody td:first-child {
+  text-align: left;
+  padding-left: 12px;
+  color: var(--lp-text);
+  font-size: 13.5px;
+  line-height: 1.4;
+  min-width: 220px;
+  padding-right: 24px;
+}
+
+.cp-table tbody td.col-rr {
+  background: rgba(194, 59, 34, .05);
+  font-weight: 700;
+  color: #C23B22;
+}
+
+.cp-table tbody td.check-other { color: var(--lp-text); }
+.cp-table tbody td.partial {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #9A7B5A;
+}
+
+/* ── Callout — dark brown, NOT red ───────────────────────────────────────── */
+.cp-callout {
+  background: var(--lp-paper);
+  border: 1px solid var(--lp-border);
+  border-left: 3px solid #2C1A0E;
+  padding: 24px 28px;
+  margin-bottom: 48px;
+}
+
+.lp-root.lp-dark .cp-callout {
+  border-left-color: var(--lp-border);
+}
+
+.cp-callout-label {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--lp-text);
+  margin-bottom: 10px;
+}
+
+.cp-callout p {
+  font-size: 14px;
+  color: var(--lp-text-mid);
+  line-height: 1.85;
+  margin: 0;
+}
+
+.cp-callout strong { color: var(--lp-text); }
+
+/* ── CTA strip ────────────────────────────────────────────────────────────── */
+.cp-cta {
+  text-align: center;
+  padding: 16px 0 8px;
+}
+
+.cp-cta-btn {
+  display: inline-block;
+  background: #C23B22;
+  color: #FBF0DC;
+  border: none;
+  padding: 13px 40px;
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 16px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 4px 4px 0 rgba(92, 58, 30, .18);
+  transition: background .15s, transform .08s;
+}
+.cp-cta-btn:hover { background: #9B2D17; transform: translate(2px, 2px); }
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.cp-footer {
+  border-top: 1px solid var(--lp-border);
+  padding: 20px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--lp-text-light);
+}
+
+.cp-footer-link {
+  color: var(--lp-text-light);
+  text-decoration: none;
+  transition: color .12s;
+}
+.cp-footer-link:hover { color: var(--lp-text); }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .cp-nav { padding: 0 20px; }
+  .cp-hero { padding: 48px 24px 40px; }
+  .cp-content { padding: 0 20px; margin: 40px auto; }
+  .cp-footer { padding: 16px 20px; flex-direction: column; gap: 10px; text-align: center; }
+}

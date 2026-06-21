@@ -1,0 +1,254 @@
+/* ── Root ─────────────────────────────────────────────────────────────────── */
+.pp-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: 'Lato', system-ui, sans-serif;
+}
+
+/* ── Nav ──────────────────────────────────────────────────────────────────── */
+.pp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 48px;
+  height: 56px;
+  border-bottom: 1px solid var(--lp-border);
+  background: var(--lp-bg);
+}
+
+.pp-logo {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: var(--lp-text);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pp-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.pp-nav-link {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--lp-text-mid);
+  text-decoration: none;
+  transition: color .12s;
+}
+.pp-nav-link:hover { color: var(--lp-text); }
+
+.pp-nav-link.active { color: var(--lp-text); }
+
+.pp-signin-btn {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #FBF0DC;
+  background: #2C1A0E;
+  border: 1.5px solid #2C1A0E;
+  padding: 7px 18px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .15s;
+}
+.pp-signin-btn:hover { background: #C23B22; border-color: #C23B22; }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.pp-hero {
+  text-align: center;
+  padding: 32px 48px 20px;
+  border-bottom: 1px solid var(--lp-border);
+}
+
+.pp-eyebrow {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 5px;
+  color: #9A7B5A;
+  margin: 0 0 10px;
+}
+
+.pp-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(26px, 3.5vw, 40px);
+  font-weight: 900;
+  color: var(--lp-text);
+  line-height: 1.05;
+  margin: 0 0 10px;
+  letter-spacing: -1px;
+}
+
+.pp-sub {
+  font-size: 15px;
+  color: var(--lp-text-mid);
+  max-width: 520px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* ── Content ──────────────────────────────────────────────────────────────── */
+.pp-content {
+  flex: 1;
+  max-width: 480px;
+  width: 100%;
+  margin: 24px auto;
+  padding: 0 24px;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────── */
+.pp-card {
+  border: 2px solid var(--lp-text);
+  background: var(--lp-paper);
+  padding: 32px 36px;
+  box-shadow: 6px 6px 0 rgba(44, 26, 14, .1);
+  margin-bottom: 32px;
+}
+
+.pp-plan-label {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: #9A7B5A;
+  margin-bottom: 8px;
+}
+
+.pp-price {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--lp-text);
+  line-height: 1;
+  letter-spacing: -2px;
+  margin-bottom: 4px;
+}
+
+.pp-price-sub {
+  font-size: 13px;
+  color: #9A7B5A;
+  margin-bottom: 16px;
+}
+
+.pp-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+
+.pp-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13.5px;
+  color: var(--lp-text);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--lp-border);
+}
+.pp-feature-item:first-child { border-top: 1px solid var(--lp-border); }
+
+.pp-check {
+  color: #C23B22;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.pp-github-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #2C1A0E;
+  color: #FBF0DC;
+  padding: 10px 24px;
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 14px;
+  letter-spacing: 2px;
+  text-decoration: none;
+  box-shadow: 3px 3px 0 rgba(44, 26, 14, .15);
+  transition: background .15s;
+}
+.pp-github-btn:hover { background: #C23B22; }
+
+/* ── OTLP note ────────────────────────────────────────────────────────────── */
+.pp-note {
+  background: var(--lp-paper);
+  border: 1px solid var(--lp-border);
+  border-left: 3px solid #2C1A0E;
+  padding: 24px 28px;
+}
+
+.pp-note-label {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--lp-text);
+  margin-bottom: 10px;
+}
+
+.pp-note-text {
+  font-size: 14px;
+  color: var(--lp-text-mid);
+  line-height: 1.85;
+  margin: 0 0 14px;
+}
+
+.pp-note-text code {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  background: var(--lp-paper-alt);
+  padding: 1px 5px;
+  color: var(--lp-text);
+}
+
+.pp-note-link {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--lp-text);
+  text-decoration: none;
+  transition: color .12s;
+}
+.pp-note-link:hover { color: #C23B22; }
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.pp-footer {
+  border-top: 1px solid var(--lp-border);
+  padding: 20px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--lp-text-light);
+}
+
+.pp-footer-link {
+  color: var(--lp-text-light);
+  text-decoration: none;
+  transition: color .12s;
+}
+.pp-footer-link:hover { color: var(--lp-text); }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .pp-nav { padding: 0 20px; }
+  .pp-hero { padding: 56px 24px 48px; }
+  .pp-content { margin: 40px auto; }
+  .pp-card { padding: 32px 24px; }
+  .pp-price { font-size: 64px; }
+  .pp-footer { padding: 16px 20px; flex-direction: column; gap: 10px; text-align: center; }
+}

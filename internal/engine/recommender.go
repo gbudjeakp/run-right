@@ -60,14 +60,15 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 			deltaPercent = ((estimatedMonthly - currentMonthly) / currentMonthly) * 100
 		}
 		results = append(results, types.Recommendation{
-			Machine:           m,
-			Tier:              tier,
-			EstimatedMonthly:  estimatedMonthly,
-			CurrentMonthly:    currentMonthly,
-			CostDeltaPercent:  deltaPercent,
-			RequiredVCPUs:     requiredVCPUs,
-			RequiredMemoryGiB: requiredMemGiB,
-			Reasoning:         buildReasoning(m, summary, requiredVCPUs, requiredMemGiB),
+			Machine:             m,
+			Tier:                tier,
+			EstimatedMonthly:    estimatedMonthly,
+			CurrentMonthly:      currentMonthly,
+			CostDeltaPercent:    deltaPercent,
+			RequiredVCPUs:       requiredVCPUs,
+			RequiredMemoryGiB:   requiredMemGiB,
+			Reasoning:           buildReasoning(m, summary, requiredVCPUs, requiredMemGiB),
+			KubernetesResources: buildK8sResources(summary, requiredVCPUs, requiredMemGiB),
 		})
 	}
 
@@ -111,6 +112,46 @@ func buildReasoning(m types.MachineType, s types.MetricsSummary, reqVCPUs int, r
 		reqVCPUs, reqMemGiB,
 		m.ID, m.VCPUs, m.MemoryGiB, cpuSlack, memSlack,
 	)
+}
+
+// buildK8sResources computes Kubernetes resource request/limit values based on
+// observed p95 usage. Requests are set to p95 usage (what the pod actually needs
+// to be scheduled). Limits are set to peak usage plus a small safety margin so
+// a transient spike doesn't trigger an OOM kill or CPU throttle.
+func buildK8sResources(s types.MetricsSummary, reqVCPUs int, reqMemGiB float64) *types.KubernetesResources {
+	// CPU request: p95 as millicores (1 vCPU = 1000m).
+	// We base this on requiredVCPUs which already has the 20% headroom applied.
+	cpuRequestMillis := reqVCPUs * 1000
+
+	// CPU limit: peak usage + 20% burst allowance, never below the request.
+	cpuPeakMillis := int(math.Ceil(s.CPUPercentPeak / 100.0 * float64(reqVCPUs) * 1000 * 1.20))
+	if cpuPeakMillis < cpuRequestMillis {
+		cpuPeakMillis = cpuRequestMillis
+	}
+
+	// Memory request: p95 with 30% headroom (same as requiredMemGiB).
+	memRequestMiB := int(math.Ceil(reqMemGiB * 1024))
+
+	// Memory limit: peak + 20% safety margin, minimum 512 MiB above request.
+	memPeakMiB := int(math.Ceil(s.MemUsedGiBPeak * 1024 * 1.20))
+	if memPeakMiB < memRequestMiB+512 {
+		memPeakMiB = memRequestMiB + 512
+	}
+
+	return &types.KubernetesResources{
+		CPURequest:    fmt.Sprintf("%dm", cpuRequestMillis),
+		CPULimit:      fmt.Sprintf("%dm", cpuPeakMillis),
+		MemoryRequest: mibToK8s(memRequestMiB),
+		MemoryLimit:   mibToK8s(memPeakMiB),
+	}
+}
+
+// mibToK8s converts MiB to a Kubernetes memory string (Mi or Gi).
+func mibToK8s(mib int) string {
+	if mib%1024 == 0 {
+		return fmt.Sprintf("%dGi", mib/1024)
+	}
+	return fmt.Sprintf("%dMi", mib)
 }
 
 func tierOrder(t types.RecommendationTier) int {

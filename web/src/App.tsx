@@ -8,6 +8,8 @@ import SettingsPage from './pages/SettingsPage'
 import LoginPage from './pages/LoginPage'
 import LandingPage from './pages/LandingPage'
 import InstallPage from './pages/InstallPage'
+import PricingPage from './pages/PricingPage'
+import ComparePage from './pages/ComparePage'
 import { logout } from './api'
 import LogoMark from './components/LogoMark'
 import './App.css'
@@ -34,6 +36,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage onEnter={() => navigate('/login')} />} />
       <Route path="/install" element={<InstallPage />} />
+      <Route path="/pricing" element={<PricingPage />} />
+      <Route path="/compare" element={<ComparePage />} />
       <Route
         path="/login"
         element={

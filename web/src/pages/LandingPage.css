@@ -83,6 +83,14 @@
     padding: 64px 32px 56px !important;
   }
 
+  .lp-hero-inner {
+    flex-direction: column !important;
+    gap: 40px !important;
+    padding: 64px 32px 56px !important;
+  }
+
+  .lp-hero-visual { display: none !important; }
+
   .lp-proof-bar {
     padding: 12px 28px !important;
     gap: 24px !important;
@@ -114,6 +122,11 @@
     grid-template-columns: 1fr !important;
   }
 
+  .lp-calc-grid {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+
   /* full-width span no longer needed in 1-col */
   .lp-card-grid > [style*="gridColumn"] {
     grid-column: auto !important;
@@ -143,6 +156,10 @@
   }
 
   .lp-hero {
+    padding: 48px 20px 40px !important;
+  }
+
+  .lp-hero-inner {
     padding: 48px 20px 40px !important;
   }
 
@@ -182,6 +199,15 @@
   }
 
   .lp-cta {
+    padding: 48px 20px !important;
+  }
+
+  .lp-faq-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .lp-compare-wrap {
     padding: 48px 20px !important;
   }
 
