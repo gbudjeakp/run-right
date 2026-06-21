@@ -44,22 +44,25 @@ Grafana, Datadog, and Sentry tell you how your application behaves. They do not 
 
 ---
 
-## Setup
+## Install
 
-**Already using Datadog, Grafana Cloud, New Relic, or any OTLP-compatible tool?** No backend or database needed — just point the binary at your existing collector:
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector:4317 \
-  runright monitor --export otlp --job-id my-build
-```
-
-**Using Prometheus?**
+**Binary — macOS / Linux**
 
 ```bash
-runright monitor --export prometheus --prometheus-port 9090
+curl -fsSL \
+  "https://github.com/gbudjeakp/run-right/releases/latest/download/runright_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz" \
+  | tar -xz && sudo mv runright /usr/local/bin/
 ```
 
-**Want the full self-hosted stack** (dashboard + API + Postgres):
+**GitHub Actions** — no install needed, use the action directly:
+
+```yaml
+- uses: gbudjeakp/run-right@v1
+  with:
+    run: make build
+```
+
+**Docker Compose** — self-hosted dashboard + API + Postgres:
 
 ```bash
 export RUNRIGHT_API_KEY=$(openssl rand -hex 32)
@@ -71,6 +74,19 @@ docker compose up -d
 | Dashboard | http://localhost:3000 |
 | API | http://localhost:8080 |
 | PostgreSQL | localhost:5435 |
+
+**Already using Datadog, Grafana Cloud, New Relic, or any OTLP tool?** Skip the backend entirely — point RunRight at your existing collector:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector:4317 \
+  runright monitor --export otlp --job-id my-build
+```
+
+**Using Prometheus?**
+
+```bash
+runright monitor --export prometheus --prometheus-port 9090
+```
 
 ---
 
@@ -117,7 +133,27 @@ env:
 
 ---
 
-## Recommendation tiers
+## FAQ
+
+**Does RunRight slow down my builds?**
+No. It runs as a background sidecar and polls `/proc` at a configurable interval (default 5s). Typical footprint: under 5 MB RSS, under 0.1% CPU on the sampler process. Your build time is not affected.
+
+**Do I need to change my application code?**
+No. RunRight wraps your existing CI step. No SDK to import, no annotations, no config file required.
+
+**How is it different from Datadog, Grafana, or Sentry?**
+Those tools show you how your application behaves. RunRight answers a different question: given your actual p95 CPU and memory usage, which specific AWS or GCP instance is the cheapest one that still fits? It maps usage to a 160+ entry machine catalog and returns a concrete recommendation with a cost delta, not a graph you have to interpret yourself.
+
+**I already ship metrics to Datadog. Do I need the RunRight backend?**
+No. Use `--export otlp` with `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at your existing collector. The backend and Postgres are only needed if you want the self-hosted RunRight dashboard.
+
+**What data does it collect?**
+CPU usage (per-core and aggregate), memory (RSS, virtual, percent), disk I/O, network I/O, and thread count. No source code, environment variables, or secrets are sampled.
+
+**Which CI platforms are supported?**
+GitHub Actions, Jenkins, and any generic CI environment. Platform is detected automatically via environment variables. Kubernetes pod resource limits are read via cgroup v2/v1.
+
+---
 
 | Tier | Meaning |
 |------|---------|
