@@ -1,8 +1,28 @@
-# RunRight
+<p align="center">
+  <img src="web/public/favicon.svg" width="72" height="72" alt="RunRight logo" />
+</p>
 
-**Right-size your CI machines.** RunRight runs alongside every CI job, samples CPU/memory/disk/threads, and recommends the cheapest AWS or GCP instance that still fits your workload.
+<h1 align="center">RunRight</h1>
 
-Self-hosted · MIT · No SaaS · Container-aware (cgroup v2/v1)
+<p align="center"><strong>Right-size your CI machines.</strong> RunRight runs alongside every CI job, samples CPU/memory/disk/threads, and recommends the cheapest AWS or GCP instance that still fits your workload.</p>
+
+<p align="center">Self-hosted · MIT · No SaaS · Container-aware (cgroup v2/v1)</p>
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src=".github/screenshots/ss-04.png" width="49%" alt="Run detail — CPU & memory metrics" />
+  <img src=".github/screenshots/ss-05.png" width="49%" alt="Recommendations — right-sized, cheaper-option, more-headroom tiers" />
+</p>
+<p align="center">
+  <img src=".github/screenshots/ss-01.png" width="49%" alt="Jobs list" />
+  <img src=".github/screenshots/ss-03.png" width="49%" alt="Job detail — run history" />
+</p>
+<p align="center">
+  <img src=".github/screenshots/ss-06.png" width="98%" alt="Grafana dashboard — CI compute sizes" />
+</p>
 
 ---
 
