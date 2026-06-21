@@ -89,7 +89,7 @@ runs:
         esac
 
         VERSION="${{ inputs.version }}"
-        REPO="sgbudje/runright"
+        REPO="gbudjeakp/run-right"
         BIN_DIR="$HOME/.runright/bin"
         mkdir -p "$BIN_DIR"
 

@@ -10,23 +10,56 @@
 
 ---
 
-## Screenshots
+## Why RunRight
 
+Grafana, Datadog, and Sentry tell you how your application behaves. They do not tell you whether you are paying for the right machine. RunRight answers that one question: given your actual p95 CPU and memory usage, what is the cheapest specific AWS or GCP instance type that still leaves headroom?
+
+- **No code changes.** It runs as a sidecar process, not an SDK or agent you instrument your app with.
+- **Minimal overhead.** Polls `/proc` via gopsutil at a configurable interval (default 5s). Typical footprint: under 5 MB RSS, under 0.1% CPU on the sampler process. Your build time is not affected.
+- **Actionable output.** Instead of a graph you have to interpret, you get a specific instance recommendation with a cost delta and a tier label.
+- **Works with what you have.** Exports via OTLP, Prometheus, or flat JSON. If you already ship metrics to Datadog or Grafana Cloud, RunRight plugs straight in.
+
+---
+
+## In action
+
+<p align="center"><sub>Per-run CPU & memory samples</sub></p>
 <p align="center">
-  <img src=".github/screenshots/ss-04.png" width="49%" alt="Run detail — CPU & memory metrics" />
-  <img src=".github/screenshots/ss-05.png" width="49%" alt="Recommendations — right-sized, cheaper-option, more-headroom tiers" />
+  <img src=".github/screenshots/ss-04.png" width="49%" alt="Run detail: CPU and memory metrics" />
+  <img src=".github/screenshots/ss-05.png" width="49%" alt="Recommendations: right-sized, cheaper-option, more-headroom tiers" />
 </p>
+
+<p align="center"><sub>Instance recommendations by tier: right-sized / cheaper-option / more-headroom</sub></p>
+
+<p align="center"><sub>All jobs · Run history per job</sub></p>
 <p align="center">
   <img src=".github/screenshots/ss-01.png" width="49%" alt="Jobs list" />
-  <img src=".github/screenshots/ss-03.png" width="49%" alt="Job detail — run history" />
+  <img src=".github/screenshots/ss-03.png" width="49%" alt="Job detail: run history" />
 </p>
+
+<p align="center"><sub>Pipe your data into Grafana, Datadog, or any metrics tool. Raw runs land in Postgres.</sub></p>
 <p align="center">
-  <img src=".github/screenshots/ss-06.png" width="98%" alt="Grafana dashboard — CI compute sizes" />
+  <img src=".github/screenshots/ss-06.png" width="98%" alt="Grafana dashboard: CI compute sizes" />
 </p>
 
 ---
 
-## Start in 2 steps
+## Setup
+
+**Already using Datadog, Grafana Cloud, New Relic, or any OTLP-compatible tool?** No backend or database needed — just point the binary at your existing collector:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector:4317 \
+  runright monitor --export otlp --job-id my-build
+```
+
+**Using Prometheus?**
+
+```bash
+runright monitor --export prometheus --prometheus-port 9090
+```
+
+**Want the full self-hosted stack** (dashboard + API + Postgres):
 
 ```bash
 export RUNRIGHT_API_KEY=$(openssl rand -hex 32)
@@ -48,16 +81,18 @@ docker compose up -d
 - uses: gbudjeakp/run-right@v1
   with:
     run: make build
-    export: file,http
-    http-url: ${{ vars.RUNRIGHT_URL }}
+    export: otlp                            # or file,http for self-hosted
   env:
-    RUNRIGHT_API_KEY: ${{ secrets.RUNRIGHT_API_KEY }}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_ENDPOINT }}   # Datadog, Grafana Cloud, etc.
+    # RUNRIGHT_URL: ${{ vars.RUNRIGHT_URL }}  # self-hosted only
+    # RUNRIGHT_API_KEY: ${{ secrets.RUNRIGHT_API_KEY }}
 ```
 
 **Jenkins**
 ```groovy
 sh '''
-  $RUNRIGHT_BIN monitor --export http --http-url $RUNRIGHT_URL \
+  OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_ENDPOINT \
+  $RUNRIGHT_BIN monitor --export otlp \
     --job-id "$JOB_NAME-$BUILD_NUMBER" --interval 3s &
   RR_PID=$!
   make build
@@ -65,7 +100,7 @@ sh '''
 '''
 ```
 
-**Kubernetes** — set pod resource limits and RunRight reads them via cgroup v2:
+**Kubernetes**: set pod resource limits and RunRight reads them via cgroup v2:
 ```yaml
 resources:
   limits:
@@ -150,4 +185,4 @@ Full setup guide: [docs/setup.md](docs/setup.md)
 
 ---
 
-MIT — see [LICENSE](LICENSE)
+MIT. See [LICENSE](LICENSE)
