@@ -231,6 +231,9 @@ runs:
           echo "<sub>Powered by [RunRight](https://github.com/sgbudje/runright) · [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>"
         } > /tmp/runright-pr-comment.md
 
+        # Save evaluated output-dir to env so the upload step uses the same path.
+        echo "RUNRIGHT_OUTPUT_DIR=${{ inputs.output-dir }}" >> "$GITHUB_ENV"
+
     # ── PR comment ────────────────────────────────────────────────────────────
     - name: Post PR comment
       id: pr-comment
@@ -284,6 +287,6 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: runright-metrics-${{ inputs.job-id }}
-        path: ${{ inputs.output-dir }}/
+        path: ${{ env.RUNRIGHT_OUTPUT_DIR }}/
         retention-days: 30
         if-no-files-found: warn
