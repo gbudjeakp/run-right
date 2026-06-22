@@ -31,7 +31,8 @@ if [[ ! -f "$SUMMARY" ]]; then
 fi
 
 # Generate recommendations as JSON.
-RESULT=$(runright recommend --metrics "$SUMMARY" --format json 2>/dev/null || echo "[]")
+PROVIDER_FLAG=${RUNRIGHT_PROVIDER:+--provider "$RUNRIGHT_PROVIDER"}
+RESULT=$(runright recommend --metrics "$SUMMARY" --format json $PROVIDER_FLAG 2>/dev/null || echo "[]")
 echo "result=$(echo "$RESULT" | tr -d '\n')" >> "$GITHUB_OUTPUT"
 
 # Extract top recommendation.
@@ -51,11 +52,11 @@ echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║  RunRight — Machine Sizing Recommendation            ║"
 echo "╚══════════════════════════════════════════════════════╝"
-runright recommend --metrics "$SUMMARY" --format table 2>/dev/null || true
+runright recommend --metrics "$SUMMARY" --format table $PROVIDER_FLAG 2>/dev/null || true
 echo ""
 
 # Write markdown to the Actions Step Summary tab.
-runright recommend --metrics "$SUMMARY" --format markdown >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+runright recommend --metrics "$SUMMARY" --format markdown $PROVIDER_FLAG >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
 # Build PR comment body.
 MARKER="<!-- runright:${RUNRIGHT_JOB_ID} -->"
@@ -64,7 +65,7 @@ MARKER="<!-- runright:${RUNRIGHT_JOB_ID} -->"
   echo ""
   echo "### ⚡ RunRight — \`${RUNRIGHT_JOB_ID}\`"
   echo ""
-  runright recommend --metrics "$SUMMARY" --format markdown 2>/dev/null || true
+  runright recommend --metrics "$SUMMARY" --format markdown $PROVIDER_FLAG 2>/dev/null || true
   echo ""
   echo "<sub>Powered by [RunRight](https://github.com/sgbudje/runright) · [Run #${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})</sub>"
 } > /tmp/runright-pr-comment.md

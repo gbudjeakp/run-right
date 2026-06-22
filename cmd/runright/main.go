@@ -172,7 +172,7 @@ var (
 
 func init() {
 	recommendCmd.Flags().StringVar(&recommendMetrics, "metrics", "metrics-summary.json", "Path to metrics-summary.json")
-	recommendCmd.Flags().StringVar(&recommendProvider, "provider", "", "Filter by provider: aws or gcp (default: both)")
+	recommendCmd.Flags().StringVar(&recommendProvider, "provider", "", "Filter by provider: aws, gcp, or github (default: all)")
 	recommendCmd.Flags().StringVar(&recommendFormat, "format", "table", "Output format: table, json, markdown")
 }
 

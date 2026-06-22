@@ -56,6 +56,10 @@ inputs:
     description: "Post recommendations as a PR comment (true/false)"
     required: false
     default: "true"
+  provider:
+    description: "Filter recommendations by cloud provider: aws, gcp, or github (default: all)"
+    required: false
+    default: ""
 
 outputs:
   recommendation-json:
@@ -130,6 +134,7 @@ runs:
       env:
         RUNRIGHT_OUTPUT_DIR: ${{ inputs.output-dir }}
         RUNRIGHT_JOB_ID: ${{ inputs.job-id }}
+        RUNRIGHT_PROVIDER: ${{ inputs.provider }}
       run: bash "$GITHUB_ACTION_PATH/scripts/recommend.sh"
 
     # ── PR comment ────────────────────────────────────────────────────────────
