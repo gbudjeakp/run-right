@@ -218,7 +218,7 @@ func printTable(recs []types.Recommendation, s types.MetricsSummary) {
 }
 
 func printMarkdown(recs []types.Recommendation, s types.MetricsSummary) {
-	fmt.Printf("## scale-ci Recommendations\n\n")
+	fmt.Printf("## RunRight Recommendations\n\n")
 	fmt.Printf("**Job:** `%s` | **CPU p95:** %.1f%% | **Mem p95:** %.2f GiB | **Duration:** %.0fs\n\n",
 		s.JobID, s.CPUPercentP95, s.MemUsedGiBP95, s.DurationSeconds)
 	fmt.Printf("| Tier | Machine | Provider | vCPUs | Memory | $/hr | $/month | Delta |\n")
@@ -280,7 +280,7 @@ func runCatalogList(_ *cobra.Command, _ []string) error {
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start the scale-ci dashboard backend",
+	Short: "Start the RunRight dashboard backend",
 	RunE:  runServe,
 }
 

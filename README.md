@@ -6,7 +6,7 @@
 
 <p align="center"><strong>Right-size your CI machines.</strong> RunRight runs alongside every CI job, samples CPU/memory/disk/threads, and recommends the cheapest AWS or GCP instance that still fits your workload.</p>
 
-<p align="center">Self-hosted · MIT · No SaaS · Container-aware (cgroup v2/v1)</p>
+<p align="center">Self-hosted · ELv2 · No SaaS · Container-aware (cgroup v2/v1)</p>
 
 ---
 
@@ -179,4 +179,4 @@ cd web && pnpm dev
 
 ---
 
-MIT. See [LICENSE](LICENSE)
+Elastic License 2.0 (ELv2). See [LICENSE](LICENSE)

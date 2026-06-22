@@ -1024,7 +1024,7 @@ env:
       <footer style={S.footer} className="lp-footer">
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><LogoMark size={16} color="#9A7B5A" /> RUNRIGHT</span>
         <span>BUILT BY <a href="https://github.com/gbudjeakp" target="_blank" rel="noopener noreferrer" style={{ color: '#9A7B5A', textDecoration: 'none', fontFamily: "'Bebas Neue', Impact, sans-serif", letterSpacing: 1 }} onMouseEnter={e => (e.currentTarget.style.color = '#C23B22')} onMouseLeave={e => (e.currentTarget.style.color = '#9A7B5A')}>SEBASTIAN GBUDJE</a></span>
-        <span>MIT LICENSE</span>
+        <span>ELv2 LICENSE</span>
         <a
           href="https://github.com/gbudjeakp/run-right"
           target="_blank"
