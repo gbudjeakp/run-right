@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-action.json
-name: runright
-description: "Monitor CI job resource usage and get machine sizing recommendations"
+name: RunRight CI Resource Monitor
+description: "Monitor CI job resource usage and get right-sized machine recommendations"
 author: "sgbudje"
 
 branding:
