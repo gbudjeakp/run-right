@@ -177,8 +177,6 @@ go test ./internal/...
 cd web && pnpm dev
 ```
 
-Full setup guide: [docs/setup.md](docs/setup.md)
-
 ---
 
 MIT. See [LICENSE](LICENSE)

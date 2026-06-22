@@ -82,9 +82,10 @@ const NAV = [
     group: 'Infrastructure',
     items: [
       { id: 'kubernetes',     label: 'Kubernetes / Self-Hosted' },
-      { id: 'helm',           label: 'Helm (EKS / any K8s)' },
+      { id: 'helm',           label: 'Helm (EKS / GKE / any K8s)' },
       { id: 'terraform-ecs', label: 'Terraform — ECS Fargate' },
       { id: 'terraform-eks', label: 'Terraform — EKS' },
+      { id: 'terraform-gcp', label: 'Terraform — GKE' },
     ],
   },
   {
@@ -480,6 +481,24 @@ helm install runright ./helm/runright \\
               and AKS (use <code>azure/application-gateway</code> or <code>nginx</code>).
             </Callout>
 
+            <h3 className="ip-h3">With an Ingress (GKE — Cloud Load Balancer)</h3>
+            <CopyBlock label="values-gke.yaml" code={`ingress:
+  enabled: true
+  className: gce
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: runright-ip
+  hosts:
+    - host: runright.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix`} />
+            <CopyBlock label="terminal" code={`helm install runright ./helm/runright \\
+  --namespace runright --create-namespace \\
+  -f values-gke.yaml \\
+  --set postgresql.enabled=false \\
+  --set externalDSN="$DSN"`} />
+
             <h3 className="ip-h3">K8s resource recommendations</h3>
             <p className="ip-p">
               Every recommendation in the RunRight dashboard now includes suggested Kubernetes
@@ -549,6 +568,42 @@ terraform apply`} />
             <Callout type="tip">
               Set <code>create_rds = false</code> and supply <code>external_dsn</code> to reuse
               an existing Aurora or RDS cluster shared across your platform services.
+            </Callout>
+          </section>
+
+          {/* ── Terraform GKE ────────────────────────────────────────────── */}
+          <section id="terraform-gcp" className="ip-section">
+            <h2 className="ip-h2">Terraform — GCP GKE</h2>
+            <p className="ip-p">
+              The <code>terraform/gke/</code> module provisions a GKE Autopilot cluster, a
+              Cloud SQL for PostgreSQL instance, and a Workload Identity binding so the
+              RunRight pod can read secrets from GCP Secret Manager without a service-account
+              key file. The Helm chart is then installed via the Terraform Helm provider.
+            </p>
+            <CopyBlock label="terraform/gke/terraform.tfvars" code={`project_id         = "my-gcp-project"
+region             = "us-central1"
+cluster_name       = "runright-cluster"
+vpc_network        = "default"
+vpc_subnetwork     = "default"
+db_tier            = "db-g1-small"
+db_password        = "change-me"
+api_key            = "rr-secret-key"
+ingress_enabled    = true
+ingress_class_name = "gce"
+ingress_hostname   = "runright.internal.example.com"`} />
+            <CopyBlock label="terminal" code={`cd terraform/gke
+terraform init
+terraform apply`} />
+            <Callout type="info">
+              Workload Identity is enabled by default. The module creates a GCP service account,
+              binds it to the Kubernetes service account in the <code>runright</code> namespace,
+              and grants <code>roles/secretmanager.secretAccessor</code> so the pod can pull
+              credentials without a JSON key file.
+            </Callout>
+            <Callout type="tip">
+              Set <code>create_cloud_sql = false</code> and supply <code>external_dsn</code>
+              to reuse an existing Cloud SQL or AlloyDB instance. Useful when RunRight shares
+              infrastructure with other platform services.
             </Callout>
           </section>
 
