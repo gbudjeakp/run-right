@@ -286,7 +286,7 @@ const S = {
     textAlign: 'left' as const,
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   } as React.CSSProperties,
 
   featureIcon: {
