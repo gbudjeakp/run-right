@@ -143,7 +143,7 @@ func (c *Collector) sendHeartbeat() {
 	summary.Status = "heartbeat"
 	summary.CIPlatform = detectCIPlatform()
 	if v, m := detectResources(); v > 0 && m > 0 {
-		summary.DetectedMachine = catalog.DetectMachine(v, m)
+		summary.DetectedMachine = catalog.DetectMachine(v, m, ciPlatformToProvider(summary.CIPlatform))
 	}
 
 	// Write partial file so OOM-killed jobs still have data for recommendations.
@@ -254,7 +254,7 @@ func (c *Collector) Flush() error {
 	// Detect current machine. Cgroup-aware: reads container/pod limits first
 	// (K8s pods, DinD), falls back to OS-level counts on bare VMs.
 	if v, m := detectResources(); v > 0 && m > 0 {
-		summary.DetectedMachine = catalog.DetectMachine(v, m)
+		summary.DetectedMachine = catalog.DetectMachine(v, m, ciPlatformToProvider(summary.CIPlatform))
 	}
 
 	summaryPath := filepath.Join(c.cfg.OutputDir, "metrics-summary.json")
@@ -371,6 +371,19 @@ func detectCIPlatform() string {
 		return "jenkins"
 	default:
 		return "local"
+	}
+}
+
+// ciPlatformToProvider converts a CI platform name (from detectCIPlatform) to
+// a catalog provider hint. Returns an empty Provider when the platform is not
+// a known hosted-runner environment (e.g. Jenkins on a bare AWS VM — hardware
+// detection should still match against the full catalog in that case).
+func ciPlatformToProvider(platform string) types.Provider {
+	switch platform {
+	case "github":
+		return types.ProviderGitHub
+	default:
+		return ""
 	}
 }
 

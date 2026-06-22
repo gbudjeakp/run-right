@@ -105,11 +105,17 @@ func FindByID(id string) *types.MachineType {
 
 // DetectMachine matches vCPU count and total memory against the catalog to
 // identify what machine the current runner is likely running on.
-func DetectMachine(vcpus int, memTotalGiB float64) *types.MachineType {
+// When providerHint is non-empty only machines from that provider are considered,
+// which avoids false positives when the CI platform is known (e.g. GitHub Actions
+// runners are hosted on Azure/GitHub infrastructure, not AWS or GCP).
+func DetectMachine(vcpus int, memTotalGiB float64, providerHint types.Provider) *types.MachineType {
 	const memToleranceGiB = 2.0
 	var best *types.MachineType
 	for i := range allMachines {
 		m := &allMachines[i]
+		if providerHint != "" && m.Provider != providerHint {
+			continue
+		}
 		if m.VCPUs != vcpus {
 			continue
 		}
