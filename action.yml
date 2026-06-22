@@ -133,12 +133,20 @@ runs:
       run: |
         if [[ -f /tmp/runright-monitor.pid ]]; then
           PID=$(cat /tmp/runright-monitor.pid)
-          kill -TERM "$PID" 2>/dev/null || true
-          # `wait` only works for child PIDs of the current shell; poll instead.
-          for i in $(seq 1 40); do
-            kill -0 "$PID" 2>/dev/null || break
-            sleep 0.25
-          done
+          if ! kill -0 "$PID" 2>/dev/null; then
+            # Process already dead — likely OOM-killed or force-stopped by the runner
+            echo "::warning::RunRight: monitor exited unexpectedly before the job finished. " \
+              "Your runner may have run out of memory or been force-stopped. " \
+              "Check that your runner is online and consider upgrading to a larger instance type."
+            echo "RUNRIGHT_UNEXPECTED_EXIT=1" >> "$GITHUB_ENV"
+          else
+            kill -TERM "$PID" 2>/dev/null || true
+            # `wait` only works for child PIDs of the current shell; poll instead.
+            for i in $(seq 1 40); do
+              kill -0 "$PID" 2>/dev/null || break
+              sleep 0.25
+            done
+          fi
           rm -f /tmp/runright-monitor.pid
         fi
 
@@ -165,12 +173,19 @@ runs:
       run: |
         if [[ -f /tmp/runright-monitor.pid ]]; then
           PID=$(cat /tmp/runright-monitor.pid)
-          kill -TERM "$PID" 2>/dev/null || true
-          # `wait` only works for child PIDs of the current shell; poll instead.
-          for i in $(seq 1 40); do
-            kill -0 "$PID" 2>/dev/null || break
-            sleep 0.25
-          done
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "::warning::RunRight: monitor exited unexpectedly before the job finished. " \
+              "Your runner may have run out of memory or been force-stopped. " \
+              "Check that your runner is online and consider upgrading to a larger instance type."
+            echo "RUNRIGHT_UNEXPECTED_EXIT=1" >> "$GITHUB_ENV"
+          else
+            kill -TERM "$PID" 2>/dev/null || true
+            # `wait` only works for child PIDs of the current shell; poll instead.
+            for i in $(seq 1 40); do
+              kill -0 "$PID" 2>/dev/null || break
+              sleep 0.25
+            done
+          fi
           rm -f /tmp/runright-monitor.pid
         fi
 
@@ -184,7 +199,13 @@ runs:
         SUMMARY="${{ inputs.output-dir }}/metrics-summary.json"
 
         if [[ ! -f "$SUMMARY" ]]; then
-          echo "No metrics-summary.json found at $SUMMARY, skipping recommendations."
+          if [[ "${RUNRIGHT_UNEXPECTED_EXIT:-0}" == "1" ]]; then
+            echo "::error::RunRight: No metrics were collected — the monitor was killed before it could write results."
+            echo "::notice::This usually means the runner ran out of memory (OOM) or was force-stopped."
+            echo "::notice::Suggestions: (1) Check your runner is still online. (2) Try a larger instance type for this job."
+          else
+            echo "No metrics-summary.json found at $SUMMARY, skipping recommendations."
+          fi
           exit 0
         fi
 
