@@ -75,11 +75,22 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
   const [dark, setDark] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('rr-theme') === 'dark' : false
   )
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('rr-sidebar') !== 'closed' : true
+  )
 
   function toggleDark() {
     setDark(d => {
       const next = !d
       localStorage.setItem('rr-theme', next ? 'dark' : 'light')
+      return next
+    })
+  }
+
+  function toggleSidebar() {
+    setSidebarOpen(o => {
+      const next = !o
+      localStorage.setItem('rr-sidebar', next ? 'open' : 'closed')
       return next
     })
   }
@@ -102,7 +113,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className={`app${dark ? ' dark-mode' : ''}`}>
-      <nav className="sidebar">
+      <nav className={`sidebar${sidebarOpen ? '' : ' collapsed'}`}>
         <Link
           to="/app"
           className="logo"
@@ -159,6 +170,23 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
         </div>
       </nav>
       <main className="content">
+        <button
+          className="sidebar-toggle"
+          onClick={toggleSidebar}
+          aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {sidebarOpen ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          )}
+        </button>
         <Outlet />
       </main>
     </div>

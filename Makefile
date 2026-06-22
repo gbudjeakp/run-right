@@ -10,7 +10,7 @@ PLATFORMS := \
 	windows/amd64
 
 .PHONY: build build-all build-linux build-linux-amd64 build-linux-arm64 \
-        test lint clean run-server docker-up docker-down catalog-update seed
+        test lint clean run-server docker-up docker-down catalog-update seed deploy
 
 build:
 	go build $(BUILD_FLAGS) -o bin/$(BINARY) $(CMD_DIR)
@@ -59,6 +59,15 @@ catalog-list: build
 
 seed:
 	go run ./cmd/seed/ --url http://localhost:8080
+
+# Deploy the React frontend to runright.dev
+# Usage: make deploy   (re-builds and uploads to VPS)
+VPS_HOST := root@2.24.203.35
+VPS_DIR  := /var/www/runright
+
+deploy:
+	cd web && pnpm build
+	rsync -avz --delete web/dist/ $(VPS_HOST):$(VPS_DIR)/
 
 catalog-update-aws: build
 	go run ./catalog/updater/aws/... --output catalog/data/aws.json

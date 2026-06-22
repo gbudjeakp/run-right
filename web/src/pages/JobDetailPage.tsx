@@ -223,7 +223,9 @@ export default function JobDetailPage() {
                       <td>{r.machine.architecture}</td>
                       <td>${r.machine.on_demand_price_per_hour.toFixed(4)}</td>
                       <td>${r.estimated_monthly_usd.toFixed(2)}</td>
-                      <td style={{ color: '#5A8A3A', fontFamily: 'monospace', fontSize: 13 }}>${r.spot_monthly_usd?.toFixed(2) ?? '—'}</td>
+                      <td style={{ color: '#5A8A3A', fontFamily: 'monospace', fontSize: 13 }}>
+                        {(r.spot_monthly_usd ?? 0) > 0 ? `$${r.spot_monthly_usd!.toFixed(2)}` : '—'}
+                      </td>
                       <td><DeltaCell pct={r.cost_delta_percent} /></td>
                     </tr>
                   ))}

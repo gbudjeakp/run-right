@@ -59,6 +59,7 @@ export function DateRangePicker({
   const inputStyle: React.CSSProperties = {
     background: '#FFFDF7',
     border: '1px solid #D4B896',
+    borderBottom: '2px solid #B8946A',
     color: '#2C1A0E',
     fontFamily: 'Lato, sans-serif',
     fontSize: 13,

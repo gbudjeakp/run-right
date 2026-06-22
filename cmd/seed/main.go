@@ -341,14 +341,22 @@ func recommend(s types.MetricsSummary, detected types.MachineType, currentMonthl
 func rec(m types.MachineType, tier types.RecommendationTier, currentMonthly float64) types.Recommendation {
 	estimated := m.OnDemandPricePerHour * 720
 	delta := (estimated - currentMonthly) / currentMonthly * 100
+	spotFactor := 0.30
+	if m.Provider == types.ProviderGCP {
+		spotFactor = 0.20
+	}
+	spot := estimated * spotFactor
+	spotDelta := (spot - currentMonthly) / currentMonthly * 100
 	return types.Recommendation{
 		Machine:           m,
 		Tier:              tier,
 		EstimatedMonthly:  estimated,
+		SpotMonthly:       spot,
 		CurrentMonthly:    currentMonthly,
 		CostDeltaPercent:  delta,
+		SpotDeltaPercent:  spotDelta,
 		RequiredVCPUs:     m.VCPUs,
 		RequiredMemoryGiB: m.MemoryGiB,
-		Reasoning:         fmt.Sprintf("Based on p95 CPU and memory usage patterns over recent runs."),
+		Reasoning:         "Based on p95 CPU and memory usage patterns over recent runs.",
 	}
 }

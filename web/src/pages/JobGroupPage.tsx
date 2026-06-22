@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { fetchJobs } from '../api'
 import type { Job } from '../types'
@@ -185,7 +185,7 @@ export default function JobGroupPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
                     <XAxis dataKey="run" {...axisStyle} tick={tickStyle} />
                     <YAxis domain={[0, 100]} {...axisStyle} unit="%" tick={tickStyle} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}%`, 'CPU p95']} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${Number(v).toFixed(1)}%`, 'CPU p95']} />
                     <Line type="monotone" dataKey="cpu" stroke="#C23B22" strokeWidth={2} dot={{ r: 3 }} name="CPU p95 %" />
                   </LineChart>
                 </ResponsiveContainer>
@@ -199,7 +199,7 @@ export default function JobGroupPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
                     <XAxis dataKey="run" {...axisStyle} tick={tickStyle} />
                     <YAxis {...axisStyle} unit=" GiB" tick={tickStyle} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v} GiB`, 'Mem p95']} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${Number(v).toFixed(2)} GiB`, 'Mem p95']} />
                     <Line type="monotone" dataKey="mem" stroke="#1B3361" strokeWidth={2} dot={{ r: 3 }} name="Mem p95 GiB" />
                   </LineChart>
                 </ResponsiveContainer>
@@ -213,7 +213,7 @@ export default function JobGroupPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
                     <XAxis dataKey="run" {...axisStyle} tick={tickStyle} />
                     <YAxis {...axisStyle} unit="s" tick={tickStyle} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}s`, 'Duration']} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${Number(v).toFixed(0)}s`, 'Duration']} />
                     <Line type="monotone" dataKey="dur" stroke="#B8860B" strokeWidth={2} dot={{ r: 3 }} name="Duration (s)" />
                   </LineChart>
                 </ResponsiveContainer>

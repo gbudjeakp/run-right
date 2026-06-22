@@ -55,7 +55,50 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: width .28s cubic-bezier(.4,0,.2,1), padding .28s cubic-bezier(.4,0,.2,1);
+}
+.sidebar.collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ── Sidebar toggle button ── */
+.sidebar-toggle {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-bottom: 2px solid var(--border-dark);
+  color: var(--text-mid);
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: color .15s, background .15s, transform .1s;
+  flex-shrink: 0;
+}
+.sidebar-toggle:hover {
+  color: var(--text);
+  background: var(--cream-alt);
+  transform: translateY(-1px);
+}
+
+/* Push content down so the toggle doesn't overlap the h1 */
+.content {
+  flex: 1;
+  padding: 40px 36px;
+  padding-top: 64px;
   overflow-y: auto;
+  background: var(--cream);
+  position: relative;
 }
 
 .logo {
@@ -95,14 +138,6 @@ body {
   color: var(--cream);
   border-left-color: var(--gold-light);
   background: rgba(251,240,220,.08);
-}
-
-/* ── Main content ── */
-.content {
-  flex: 1;
-  padding: 40px 36px;
-  overflow-y: auto;
-  background: var(--cream);
 }
 
 /* ── Headings ── */
@@ -221,6 +256,10 @@ tr:last-child td { border-bottom: none; }
 
 /* CI platform badges */
 .badge-ci-github    { color: #24292e; border-color: #24292e; background: rgba(36,41,46,.08); }
+.badge-ci-gitlab    { color: #FC6D26; border-color: #FC6D26; background: rgba(252,109,38,.08); }
+.badge-ci-circleci  { color: #343434; border-color: #343434; background: rgba(52,52,52,.08); }
+.badge-ci-bitbucket { color: #0052CC; border-color: #0052CC; background: rgba(0,82,204,.08); }
+.badge-ci-azure     { color: #0078D4; border-color: #0078D4; background: rgba(0,120,212,.08); }
 .badge-ci-jenkins   { color: #CC3421; border-color: #CC3421; background: rgba(204,52,33,.08); }
 .badge-ci-local     { color: var(--text-light); border-color: var(--border); background: transparent; }
 
@@ -241,6 +280,20 @@ tr:last-child td { border-bottom: none; }
   font-family: var(--sans);
   font-size: 14px;
   outline: none;
+}
+.filter-bar select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%239A7B5A' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+.filter-bar input[type="date"] {
+  cursor: pointer;
+  color-scheme: light;
+  font-family: var(--sans);
 }
 .filter-bar input::placeholder { color: var(--text-light); }
 .filter-bar input:focus,
@@ -375,4 +428,13 @@ tr:last-child td { border-bottom: none; }
   background: #231810 !important;
   border-color: #3D2810 !important;
   color: #F5E4C8 !important;
+}
+
+/* Filter controls in dark mode */
+.app.dark-mode .filter-bar select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23C09870' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+}
+.app.dark-mode .filter-bar select option {
+  background: #231810;
+  color: #F5E4C8;
 }

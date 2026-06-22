@@ -39,10 +39,10 @@ export interface Recommendation {
   machine: MachineType
   tier: 'right-sized' | 'cheaper-option' | 'more-headroom'
   estimated_monthly_usd: number
-  spot_monthly_usd: number
+  spot_monthly_usd?: number
   current_monthly_usd: number
   cost_delta_percent: number
-  spot_delta_percent: number
+  spot_delta_percent?: number
   required_vcpus: number
   required_memory_gib: number
   reasoning: string

@@ -34,7 +34,7 @@ Grafana, Datadog, and Sentry tell you how your application behaves. They do not 
 <p align="center"><sub>All jobs · Run history per job</sub></p>
 <p align="center">
   <img src=".github/screenshots/ss-01.png" width="49%" alt="Jobs list" />
-  <img src=".github/screenshots/ss-03.png" width="49%" alt="Job detail: run history" />
+  <img src=".github/screenshots/ss-09.png" width="49%" alt="Job detail: run history" />
 </p>
 
 <p align="center"><sub>Pipe your data into Grafana, Datadog, or any metrics tool. Raw runs land in Postgres.</sub></p>
