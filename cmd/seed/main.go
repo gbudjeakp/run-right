@@ -143,7 +143,7 @@ func buildJobs() []payload {
 		t := now.AddDate(0, 0, -i)
 		growth := float64(30-i) / 30.0 // 0 → 1 over the month
 
-		cpu := jitter(28+growth*22, 4)  // 28% → 50% over the month
+		cpu := jitter(28+growth*22, 4)     // 28% → 50% over the month
 		mem := jitter(1.1+growth*0.9, 0.1) // 1.1 → 2.0 GiB
 
 		jobs = append(jobs, makeJob("build", "github", t, awsT3Medium, cpu, mem, 185+growth*75))

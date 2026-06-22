@@ -247,10 +247,10 @@ var catalogListCmd = &cobra.Command{
 }
 
 var (
-	catalogProvider   string
-	catalogMinVCPUs   int
-	catalogMaxPrice   float64
-	catalogArch       string
+	catalogProvider string
+	catalogMinVCPUs int
+	catalogMaxPrice float64
+	catalogArch     string
 )
 
 func init() {

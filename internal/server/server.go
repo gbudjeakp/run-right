@@ -92,7 +92,7 @@ func (s *Server) Run(port int) error {
 // --- Route handlers ---
 
 type jobPayload struct {
-	Summary         types.MetricsSummary  `json:"summary"`
+	Summary         types.MetricsSummary   `json:"summary"`
 	Recommendations []types.Recommendation `json:"recommendations"`
 }
 
@@ -311,11 +311,11 @@ func (s *Server) getSavings(c *gin.Context) {
 		avgWastePct = totalWastePct / float64(jobsWithSaving)
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"total_jobs":                  totalJobs,
-		"jobs_with_savings":           jobsWithSaving,
-		"estimated_monthly_savings":   totalSavingUSD,
-		"projected_annual_savings":    totalSavingUSD * 12,
-		"avg_waste_percent":           avgWastePct,
+		"total_jobs":                totalJobs,
+		"jobs_with_savings":         jobsWithSaving,
+		"estimated_monthly_savings": totalSavingUSD,
+		"projected_annual_savings":  totalSavingUSD * 12,
+		"avg_waste_percent":         avgWastePct,
 	})
 }
 

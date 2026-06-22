@@ -47,14 +47,14 @@ func All() []types.MachineType {
 
 // QueryOptions allows filtering and sorting the catalog.
 type QueryOptions struct {
-	Provider     types.Provider
-	MinVCPUs     int
-	MaxVCPUs     int
-	MinMemoryGiB float64
-	MaxMemoryGiB float64
+	Provider        types.Provider
+	MinVCPUs        int
+	MaxVCPUs        int
+	MinMemoryGiB    float64
+	MaxMemoryGiB    float64
 	MaxPricePerHour float64
-	Architecture string
-	Tags         []string
+	Architecture    string
+	Tags            []string
 }
 
 // Query filters the catalog and returns matching machines sorted by price.
