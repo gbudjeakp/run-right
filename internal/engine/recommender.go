@@ -55,16 +55,21 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 		}
 		tier := classifyTier(m, detected, requiredVCPUs, requiredMemGiB)
 		estimatedMonthly := m.OnDemandPricePerHour * hoursPerMonth
+		spotMonthly := estimatedMonthly * spotDiscount(m.Provider)
 		deltaPercent := 0.0
+		spotDeltaPercent := 0.0
 		if currentMonthly > 0 {
 			deltaPercent = ((estimatedMonthly - currentMonthly) / currentMonthly) * 100
+			spotDeltaPercent = ((spotMonthly - currentMonthly) / currentMonthly) * 100
 		}
 		results = append(results, types.Recommendation{
 			Machine:             m,
 			Tier:                tier,
 			EstimatedMonthly:    estimatedMonthly,
+			SpotMonthly:         spotMonthly,
 			CurrentMonthly:      currentMonthly,
 			CostDeltaPercent:    deltaPercent,
+			SpotDeltaPercent:    spotDeltaPercent,
 			RequiredVCPUs:       requiredVCPUs,
 			RequiredMemoryGiB:   requiredMemGiB,
 			Reasoning:           buildReasoning(m, summary, requiredVCPUs, requiredMemGiB),
@@ -177,4 +182,15 @@ func cap(results []types.Recommendation) []types.Recommendation {
 		}
 	}
 	return out
+}
+
+// spotDiscount returns the approximate fraction of on-demand price for spot/preemptible
+// instances. AWS spot is ~30% of on-demand; GCP preemptible is ~20% of on-demand.
+func spotDiscount(provider types.Provider) float64 {
+	switch provider {
+	case types.ProviderGCP:
+		return 0.20
+	default: // AWS and others
+		return 0.30
+	}
 }

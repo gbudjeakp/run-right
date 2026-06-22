@@ -133,28 +133,6 @@ env:
 
 ---
 
-## FAQ
-
-**Does RunRight slow down my builds?**
-No. It runs as a background sidecar and polls `/proc` at a configurable interval (default 5s). Typical footprint: under 5 MB RSS, under 0.1% CPU on the sampler process. Your build time is not affected.
-
-**Do I need to change my application code?**
-No. RunRight wraps your existing CI step. No SDK to import, no annotations, no config file required.
-
-**How is it different from Datadog, Grafana, or Sentry?**
-Those tools show you how your application behaves. RunRight answers a different question: given your actual p95 CPU and memory usage, which specific AWS or GCP instance is the cheapest one that still fits? It maps usage to a 160+ entry machine catalog and returns a concrete recommendation with a cost delta, not a graph you have to interpret yourself.
-
-**I already ship metrics to Datadog. Do I need the RunRight backend?**
-No. Use `--export otlp` with `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at your existing collector. The backend and Postgres are only needed if you want the self-hosted RunRight dashboard.
-
-**What data does it collect?**
-CPU usage (per-core and aggregate), memory (RSS, virtual, percent), disk I/O, network I/O, and thread count. No source code, environment variables, or secrets are sampled.
-
-**Which CI platforms are supported?**
-GitHub Actions, Jenkins, and any generic CI environment. Platform is detected automatically via environment variables. Kubernetes pod resource limits are read via cgroup v2/v1.
-
----
-
 | Tier | Meaning |
 |------|---------|
 | `right-sized` | Current machine fits well |
@@ -175,24 +153,6 @@ cd grafana && docker compose up -d
 ```
 
 Panels: jobs/day · avg CPU p95 by job · CI platform breakdown · cost savings potential · recent runs table · CPU trend by CI platform.
-
----
-
-## Project layout
-
-```
-cmd/runright/       CLI entry point
-internal/
-  agent/            Metrics collector + cgroup-aware machine detection
-  catalog/          Embedded AWS + GCP machine catalog
-  engine/           Recommender + tier classification
-  exporter/         OTLP / Prometheus / HTTP backends
-  server/           Gin REST API + PostgreSQL
-  types/            Shared types
-web/                React dashboard (Vite + recharts)
-grafana/            Docker Compose + provisioned Grafana dashboard
-docs/               Full setup reference
-```
 
 ---
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchJobs } from '../api'
-import type { Job } from '../types'
+import { fetchJobs, fetchSavings } from '../api'
+import type { Job, SavingsSummary } from '../types'
 import { DateRangePicker, inDateRange, EMPTY_RANGE } from '../components/DateRangePicker'
 import type { DateRange } from '../components/DateRangePicker'
 import { useDebounce } from '../hooks/useDebounce'
@@ -103,6 +103,19 @@ function formatDelta(pct: number) {
   return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`
 }
 
+const CI_LABELS: Record<string, string> = {
+  github:    'GitHub Actions',
+  gitlab:    'GitLab CI',
+  circleci:  'CircleCI',
+  bitbucket: 'Bitbucket',
+  azure:     'Azure Pipelines',
+  jenkins:   'Jenkins',
+  local:     'Local',
+}
+function ciLabel(platform: string) {
+  return CI_LABELS[platform] ?? platform
+}
+
 function SortIndicator({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: 'asc' | 'desc' }) {
   if (sortKey !== col) return <span style={{ color: '#D4B896', marginLeft: 3 }}>⇅</span>
   return <span style={{ marginLeft: 3, color: '#C23B22' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
@@ -112,6 +125,7 @@ export default function JobsPage() {
   const [jobs, setJobs]       = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
+  const [savings, setSavings] = useState<SavingsSummary | null>(null)
 
   const [search,    setSearch]    = useState('')
   const debouncedSearch = useDebounce(search)
@@ -133,6 +147,7 @@ export default function JobsPage() {
       .then(setJobs)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
+    fetchSavings().then(setSavings).catch(() => {})
   }, [])
 
   // Reset to page 1 whenever filters or page-size change
@@ -176,6 +191,31 @@ export default function JobsPage() {
     <div className="fadein">
       <h1>Jobs</h1>
 
+      {savings && savings.jobs_with_savings > 0 && (
+        <div style={{
+          background: 'linear-gradient(90deg,#2C1A0E,#3D2510)', color: '#FBF0DC',
+          borderRadius: 6, padding: '14px 20px', marginBottom: 20,
+          display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center',
+        }}>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 2, color: '#C4A882', marginBottom: 2 }}>POTENTIAL MONTHLY SAVINGS</div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 28, color: '#E8C458' }}>${savings.estimated_monthly_savings.toFixed(2)}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 2, color: '#C4A882', marginBottom: 2 }}>PROJECTED ANNUAL</div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 28, color: '#FBF0DC' }}>${savings.projected_annual_savings.toFixed(0)}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 2, color: '#C4A882', marginBottom: 2 }}>OVER-PROVISIONED JOBS</div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 28, color: '#FBF0DC' }}>{savings.jobs_with_savings} <span style={{ fontSize: 14, color: '#C4A882' }}>of {savings.total_jobs}</span></div>
+          </div>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 11, letterSpacing: 2, color: '#C4A882', marginBottom: 2 }}>AVG OVER-PROVISION</div>
+            <div style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 28, color: '#C23B22' }}>{savings.avg_waste_percent.toFixed(1)}%</div>
+          </div>
+        </div>
+      )}
+
       <div className="filter-bar">
         <input
           placeholder="Search job name…"
@@ -186,6 +226,10 @@ export default function JobsPage() {
         <select value={ciPlatform} onChange={e => setCiPlatform(e.target.value)}>
           <option value="">All CI platforms</option>
           <option value="github">GitHub Actions</option>
+          <option value="gitlab">GitLab CI</option>
+          <option value="circleci">CircleCI</option>
+          <option value="bitbucket">Bitbucket Pipelines</option>
+          <option value="azure">Azure Pipelines</option>
           <option value="jenkins">Jenkins</option>
           <option value="local">Local</option>
         </select>
@@ -264,7 +308,7 @@ export default function JobsPage() {
                   {paginated.map(g => (
                     <tr key={g.jobId} style={{ cursor: 'pointer' }} onClick={() => navigate(`/app/jobs/group/${encodeURIComponent(g.jobId)}`)}>
                       <td className="td-job-name" title={g.jobId}><button className="link-btn">{g.jobId}</button></td>
-                      <td>{g.ciPlatform && <span className={`badge badge-ci-${g.ciPlatform}`}>{g.ciPlatform === 'github' ? 'GitHub Actions' : g.ciPlatform === 'jenkins' ? 'Jenkins' : g.ciPlatform}</span>}</td>
+                      <td>{g.ciPlatform && <span className={`badge badge-ci-${g.ciPlatform}`}>{ciLabel(g.ciPlatform)}</span>}</td>
                       <td>{g.provider && <span className={`badge badge-${g.provider}`}>{g.provider.toUpperCase()}</span>}</td>
                       <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{g.detectedMachine}</td>
                       <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{g.suggestedMachine}</td>

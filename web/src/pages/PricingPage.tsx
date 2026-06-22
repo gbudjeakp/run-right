@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import LogoMark from '../components/LogoMark'
 import PageNav from '../components/PageNav'
@@ -33,14 +32,12 @@ function SunIcon() {
   )
 }
 
-export default function PricingPage() {
-  const [dark, setDark] = useState(false)
-
+export default function PricingPage({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
   return (
     <div className={`lp-root pp-root${dark ? ' lp-dark' : ''}`}>
 
       {/* Nav */}
-      <PageNav dark={dark} onToggleDark={() => setDark(d => !d)} />
+      <PageNav dark={dark} onToggleDark={onToggleDark} />
 
       {/* Hero */}
       <section className="pp-hero">

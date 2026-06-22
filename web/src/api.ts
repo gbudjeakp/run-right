@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Job, MachineType } from './types'
+import type { Job, MachineType, SavingsSummary } from './types'
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -21,3 +21,6 @@ export const fetchJob = (id: number): Promise<Job> =>
 
 export const fetchCatalog = (provider?: string): Promise<MachineType[]> =>
   api.get<MachineType[]>('/catalog', { params: provider ? { provider } : {} }).then((r) => r.data ?? [])
+
+export const fetchSavings = (): Promise<SavingsSummary> =>
+  api.get<SavingsSummary>('/savings').then((r) => r.data)

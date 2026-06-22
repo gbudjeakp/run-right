@@ -60,6 +60,8 @@ function GitHubIcon({ size = 18, color = 'currentColor' }: { size?: number; colo
 // ── Moon / Sun icons for dark-mode toggle ────────────────────────
 interface Props {
   onEnter: () => void
+  dark: boolean
+  onToggleDark: () => void
 }
 
 const S = {
@@ -675,13 +677,12 @@ function SavingsCalc() {
   )
 }
 
-export default function LandingPage({ onEnter }: Props) {
-  const [dark, setDark] = useState(false)
+export default function LandingPage({ onEnter, dark, onToggleDark }: Props) {
   return (
     <div style={S.page} className={`lp-root${dark ? ' lp-dark' : ''}`}>
 
       {/* Nav */}
-      <PageNav dark={dark} onToggleDark={() => setDark(d => !d)} onSignIn={onEnter} />
+      <PageNav dark={dark} onToggleDark={onToggleDark} onSignIn={onEnter} />
 
       {/* Hero */}
       <section style={S.hero} aria-label="Hero" className="lp-hero">

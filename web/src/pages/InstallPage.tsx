@@ -104,8 +104,7 @@ const NAV = [
 ]
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function InstallPage() {
-  const [dark, setDark] = useState(false)
+export default function InstallPage({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
   const [activeId, setActiveId] = useState('overview')
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -131,7 +130,7 @@ export default function InstallPage() {
     <div className={`lp-root${dark ? ' lp-dark' : ''} ip-root`}>
 
       {/* ── Top nav ── */}
-      <PageNav dark={dark} onToggleDark={() => setDark(d => !d)} />
+      <PageNav dark={dark} onToggleDark={onToggleDark} />
 
       {/* ── Body (sidebar + content) ── */}
       <div className="ip-body">

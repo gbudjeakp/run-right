@@ -119,7 +119,13 @@ export default function JobDetailPage() {
             <div className="stat-label">CI Platform</div>
             <div className="stat-value" style={{ fontSize: 14 }}>
               <span className={`badge badge-ci-${s.ci_platform}`}>
-                {s.ci_platform === 'github' ? 'GitHub Actions' : s.ci_platform === 'jenkins' ? 'Jenkins' : s.ci_platform}
+                {s.ci_platform === 'github' ? 'GitHub Actions'
+                  : s.ci_platform === 'gitlab' ? 'GitLab CI'
+                  : s.ci_platform === 'circleci' ? 'CircleCI'
+                  : s.ci_platform === 'bitbucket' ? 'Bitbucket'
+                  : s.ci_platform === 'azure' ? 'Azure Pipelines'
+                  : s.ci_platform === 'jenkins' ? 'Jenkins'
+                  : s.ci_platform}
               </span>
             </div>
           </div>
@@ -184,38 +190,47 @@ export default function JobDetailPage() {
         {recs.length === 0 ? (
           <div className="empty">No recommendations available.</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Tier</th>
-                  <th>Machine</th>
-                  <th>Provider</th>
-                  <th>vCPUs</th>
-                  <th>Memory</th>
-                  <th>Arch</th>
-                  <th>$/hr</th>
-                  <th>$/month</th>
-                  <th>Delta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recs.map((r, i) => (
-                  <tr key={i}>
-                    <td><TierBadge tier={r.tier} /></td>
-                    <td><code>{r.machine.id}</code></td>
-                    <td><span className={`badge badge-${r.machine.provider}`}>{r.machine.provider.toUpperCase()}</span></td>
-                    <td>{r.machine.vcpus}</td>
-                    <td>{r.machine.memory_gib} GiB</td>
-                    <td>{r.machine.architecture}</td>
-                    <td>${r.machine.on_demand_price_per_hour.toFixed(4)}</td>
-                    <td>${r.estimated_monthly_usd.toFixed(2)}</td>
-                    <td><DeltaCell pct={r.cost_delta_percent} /></td>
+          <>
+            {recs[0]?.duration_regression_pct != null && (
+              <div style={{ background: '#FFF3CD', border: '1px solid #F5C842', borderRadius: 4, padding: '8px 14px', marginBottom: 12, fontFamily: 'Lato, sans-serif', fontSize: 13, color: '#7B5800' }}>
+                ⚠ Duration regression detected: this run was <strong>+{recs[0].duration_regression_pct.toFixed(1)}%</strong> slower than the rolling average.
+              </div>
+            )}
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tier</th>
+                    <th>Machine</th>
+                    <th>Provider</th>
+                    <th>vCPUs</th>
+                    <th>Memory</th>
+                    <th>Arch</th>
+                    <th>$/hr</th>
+                    <th>$/month</th>
+                    <th title="Approximate spot/preemptible price">Spot/mo</th>
+                    <th>Delta</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {recs.map((r, i) => (
+                    <tr key={i}>
+                      <td><TierBadge tier={r.tier} /></td>
+                      <td><code>{r.machine.id}</code></td>
+                      <td><span className={`badge badge-${r.machine.provider}`}>{r.machine.provider.toUpperCase()}</span></td>
+                      <td>{r.machine.vcpus}</td>
+                      <td>{r.machine.memory_gib} GiB</td>
+                      <td>{r.machine.architecture}</td>
+                      <td>${r.machine.on_demand_price_per_hour.toFixed(4)}</td>
+                      <td>${r.estimated_monthly_usd.toFixed(2)}</td>
+                      <td style={{ color: '#5A8A3A', fontFamily: 'monospace', fontSize: 13 }}>${r.spot_monthly_usd?.toFixed(2) ?? '—'}</td>
+                      <td><DeltaCell pct={r.cost_delta_percent} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

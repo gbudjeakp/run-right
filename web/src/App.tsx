@@ -24,7 +24,16 @@ export default function App() {
 
 function AppRoutes() {
   const [authed, setAuthed] = useState(false)
+  const [dark, setDark] = useState(() => localStorage.getItem('rr-dark') === 'true')
   const navigate = useNavigate()
+
+  function toggleDark() {
+    setDark(d => {
+      const next = !d
+      localStorage.setItem('rr-dark', String(next))
+      return next
+    })
+  }
 
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
@@ -34,10 +43,10 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<LandingPage onEnter={() => navigate('/login')} />} />
-      <Route path="/install" element={<InstallPage />} />
-      <Route path="/pricing" element={<PricingPage />} />
-      <Route path="/compare" element={<ComparePage />} />
+      <Route path="/" element={<LandingPage onEnter={() => navigate('/login')} dark={dark} onToggleDark={toggleDark} />} />
+      <Route path="/install" element={<InstallPage dark={dark} onToggleDark={toggleDark} />} />
+      <Route path="/pricing" element={<PricingPage dark={dark} onToggleDark={toggleDark} />} />
+      <Route path="/compare" element={<ComparePage dark={dark} onToggleDark={toggleDark} />} />
       <Route
         path="/login"
         element={

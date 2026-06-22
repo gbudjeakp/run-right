@@ -96,10 +96,13 @@ type Recommendation struct {
 	Machine              MachineType          `json:"machine"`
 	Tier                 RecommendationTier   `json:"tier"`
 	EstimatedMonthly     float64              `json:"estimated_monthly_usd"`
+	SpotMonthly          float64              `json:"spot_monthly_usd"`
 	CurrentMonthly       float64              `json:"current_monthly_usd"`
 	CostDeltaPercent     float64              `json:"cost_delta_percent"`
+	SpotDeltaPercent     float64              `json:"spot_delta_percent"`
 	RequiredVCPUs        int                  `json:"required_vcpus"`
 	RequiredMemoryGiB    float64              `json:"required_memory_gib"`
 	Reasoning            string               `json:"reasoning"`
+	DurationRegressionPct *float64            `json:"duration_regression_pct,omitempty"`
 	KubernetesResources  *KubernetesResources `json:"kubernetes_resources,omitempty"`
 }

@@ -39,11 +39,22 @@ export interface Recommendation {
   machine: MachineType
   tier: 'right-sized' | 'cheaper-option' | 'more-headroom'
   estimated_monthly_usd: number
+  spot_monthly_usd: number
   current_monthly_usd: number
   cost_delta_percent: number
+  spot_delta_percent: number
   required_vcpus: number
   required_memory_gib: number
   reasoning: string
+  duration_regression_pct?: number
+}
+
+export interface SavingsSummary {
+  total_jobs: number
+  jobs_with_savings: number
+  estimated_monthly_savings: number
+  projected_annual_savings: number
+  avg_waste_percent: number
 }
 
 export interface Job {

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import LogoMark from '../components/LogoMark'
 import PageNav from '../components/PageNav'
@@ -20,14 +19,12 @@ const ROWS: Row[] = [
   ['Self-hosted, no SaaS',                        '—', '✓',  '—',      '—',        '✓'],
 ]
 
-export default function ComparePage() {
-  const [dark, setDark] = useState(false)
-
+export default function ComparePage({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
   return (
     <div className={`lp-root cp-root${dark ? ' lp-dark' : ''}`}>
 
       {/* Nav */}
-      <PageNav dark={dark} onToggleDark={() => setDark(d => !d)} />
+      <PageNav dark={dark} onToggleDark={onToggleDark} />
 
       {/* Hero */}
       <section className="cp-hero">

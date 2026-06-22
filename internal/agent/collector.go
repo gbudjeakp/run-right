@@ -332,6 +332,14 @@ func detectCIPlatform() string {
 	switch {
 	case os.Getenv("GITHUB_ACTIONS") == "true":
 		return "github"
+	case os.Getenv("GITLAB_CI") == "true":
+		return "gitlab"
+	case os.Getenv("CIRCLECI") == "true":
+		return "circleci"
+	case os.Getenv("BITBUCKET_BUILD_NUMBER") != "" || os.Getenv("BITBUCKET_REPO_SLUG") != "":
+		return "bitbucket"
+	case os.Getenv("TF_BUILD") == "True":
+		return "azure"
 	case os.Getenv("JENKINS_URL") != "" || os.Getenv("BUILD_NUMBER") != "":
 		return "jenkins"
 	default:

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts'
 import { fetchJobs } from '../api'
 import type { Job } from '../types'
 import { DateRangePicker, inDateRange, EMPTY_RANGE } from '../components/DateRangePicker'
@@ -159,6 +162,66 @@ export default function JobGroupPage() {
         <strong>p95</strong> is the 95th-percentile sample within a single run — the load level sustained through
         95% of the job, filtering out momentary spikes. The medians above are computed from those p95 values across all runs.
       </p>
+
+      {/* Trend charts — only render when there are ≥2 runs */}
+      {runs.length >= 2 && (() => {
+        const trendData = [...runs].reverse().map((r, i) => ({
+          run: `#${runs.length - i}`,
+          date: new Date(r.start_time).toLocaleDateString(),
+          cpu: Number((r.summary?.cpu_percent_p95 ?? 0).toFixed(1)),
+          mem: Number((r.summary?.mem_used_gib_p95 ?? 0).toFixed(2)),
+          dur: Number((r.duration_seconds ?? 0).toFixed(0)),
+        }))
+        const tooltipStyle = { background: '#FFFDF7', border: '1px solid #D4B896', fontFamily: 'Lato', color: '#2C1A0E' }
+        const axisStyle = { stroke: '#9A7B5A' }
+        const tickStyle = { fontFamily: "'Lato'", fontSize: 11 }
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h2 style={{ marginBottom: 12 }}>CPU p95 Trend</h2>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
+                    <XAxis dataKey="run" {...axisStyle} tick={tickStyle} />
+                    <YAxis domain={[0, 100]} {...axisStyle} unit="%" tick={tickStyle} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}%`, 'CPU p95']} />
+                    <Line type="monotone" dataKey="cpu" stroke="#C23B22" strokeWidth={2} dot={{ r: 3 }} name="CPU p95 %" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h2 style={{ marginBottom: 12 }}>Memory p95 Trend</h2>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
+                    <XAxis dataKey="run" {...axisStyle} tick={tickStyle} />
+                    <YAxis {...axisStyle} unit=" GiB" tick={tickStyle} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v} GiB`, 'Mem p95']} />
+                    <Line type="monotone" dataKey="mem" stroke="#1B3361" strokeWidth={2} dot={{ r: 3 }} name="Mem p95 GiB" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h2 style={{ marginBottom: 12 }}>Duration Trend</h2>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
+                    <XAxis dataKey="run" {...axisStyle} tick={tickStyle} />
+                    <YAxis {...axisStyle} unit="s" tick={tickStyle} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}s`, 'Duration']} />
+                    <Line type="monotone" dataKey="dur" stroke="#B8860B" strokeWidth={2} dot={{ r: 3 }} name="Duration (s)" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Run history table */}
       <div className="card">

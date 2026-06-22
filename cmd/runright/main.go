@@ -70,6 +70,7 @@ var (
 	monitorPromPort  int
 	monitorHTTPURL   string
 	monitorSlackURL  string
+	monitorDryRun    bool
 )
 
 func init() {
@@ -81,6 +82,7 @@ func init() {
 	monitorCmd.Flags().IntVar(&monitorPromPort, "prometheus-port", 9090, "Port for Prometheus /metrics endpoint")
 	monitorCmd.Flags().StringVar(&monitorHTTPURL, "http-url", "", "Base URL of runright backend for http export")
 	monitorCmd.Flags().StringVar(&monitorSlackURL, "slack-webhook", "", "Slack incoming webhook URL for slack export (or set RUNRIGHT_SLACK_WEBHOOK)")
+	monitorCmd.Flags().BoolVar(&monitorDryRun, "dry-run", false, "Print recommendation and exit non-zero if machine is not right-sized")
 }
 
 func runMonitor(_ *cobra.Command, _ []string) error {
@@ -121,12 +123,29 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 			// the backend always has an up-to-date record for this run.
 			machines := catalog.Query(catalog.QueryOptions{})
 			recs := engine.Recommend(summary, machines)
+			if monitorDryRun && summary.Status == "completed" {
+				return runDryRun(summary, recs)
+			}
 			return mgr.PublishSummary(context.Background(), summary, recs)
 		},
 	})
 
 	fmt.Printf("runright: monitoring started (interval=%s, export=%s)\n", monitorInterval, monitorExport)
 	return col.Run(ctx)
+}
+
+// runDryRun prints the recommendation table and exits non-zero if the machine is
+// not right-sized. It is used when --dry-run is set.
+func runDryRun(summary types.MetricsSummary, recs []types.Recommendation) error {
+	printTable(recs, summary)
+	for _, r := range recs {
+		if r.Tier != "right-sized" {
+			fmt.Fprintf(os.Stderr, "\nrunright: machine is %s — change instance type to cut costs\n", recs[0].Tier)
+			os.Exit(1)
+		}
+	}
+	fmt.Println("\nrunright: machine is right-sized")
+	return nil
 }
 
 // ── recommend ────────────────────────────────────────────────────────────────
