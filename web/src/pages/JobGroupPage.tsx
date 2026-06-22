@@ -266,7 +266,7 @@ export default function JobGroupPage() {
         </div>
       </div>
 
-      {totalPages > 1 && (
+      {(totalPages > 1 || runs.length > 0) && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 12, letterSpacing: 1.5, color: '#9A7B5A' }}>ROWS</span>

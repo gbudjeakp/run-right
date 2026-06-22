@@ -33,9 +33,9 @@ inputs:
     required: false
     default: "${{ github.workspace }}/.runright"
   job-id:
-    description: "Unique job identifier (defaults to GitHub run ID)"
+    description: "Unique job identifier (defaults to the GitHub job name)"
     required: false
-    default: "${{ github.run_id }}-${{ github.run_attempt }}"
+    default: "${{ github.job }}"
   http-url:
     description: "runright backend URL for http export"
     required: false
