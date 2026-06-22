@@ -27,12 +27,14 @@ builds:
 
 archives:
   - id: runright
-    builds:
+    ids:
       - runright
+    wrap_in_directory: false
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE
       - README.md
@@ -42,8 +44,8 @@ checksum:
 
 release:
   github:
-    owner: sgbudje
-    name: runright
+    owner: gbudjeakp
+    name: run-right
   draft: false
   prerelease: auto
   header: |
@@ -51,7 +53,7 @@ release:
 
     Download the binary for your platform below, or use the GitHub Action:
     ```yaml
-    - uses: sgbudje/runright@{{ .Tag }}
+    - uses: gbudjeakp/run-right@{{ .Tag }}
       with:
         step: start
     ```
