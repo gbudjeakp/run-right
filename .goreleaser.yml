@@ -46,6 +46,7 @@ release:
   github:
     owner: gbudjeakp
     name: run-right
+  replace_existing_artifacts: true
   draft: false
   prerelease: auto
   header: |

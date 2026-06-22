@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -114,9 +115,10 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 	defer mgr.Shutdown(context.Background())
 
 	col := agent.NewCollector(agent.Config{
-		Interval:  monitorInterval,
-		OutputDir: monitorOutputDir,
-		JobID:     monitorJobID,
+		Interval:          monitorInterval,
+		OutputDir:         monitorOutputDir,
+		JobID:             monitorJobID,
+		HeartbeatFilePath: filepath.Join(monitorOutputDir, "metrics-heartbeat.json"),
 		FlushFn: func(summary types.MetricsSummary) error {
 			// Compute recommendations and post to the HTTP backend (if configured).
 			// This runs on every heartbeat AND on the final completed flush, so
