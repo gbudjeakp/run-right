@@ -134,7 +134,11 @@ runs:
         if [[ -f /tmp/runright-monitor.pid ]]; then
           PID=$(cat /tmp/runright-monitor.pid)
           kill -TERM "$PID" 2>/dev/null || true
-          wait "$PID" 2>/dev/null || true
+          # `wait` only works for child PIDs of the current shell; poll instead.
+          for i in $(seq 1 40); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.25
+          done
           rm -f /tmp/runright-monitor.pid
         fi
 
@@ -162,7 +166,11 @@ runs:
         if [[ -f /tmp/runright-monitor.pid ]]; then
           PID=$(cat /tmp/runright-monitor.pid)
           kill -TERM "$PID" 2>/dev/null || true
-          wait "$PID" 2>/dev/null || true
+          # `wait` only works for child PIDs of the current shell; poll instead.
+          for i in $(seq 1 40); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.25
+          done
           rm -f /tmp/runright-monitor.pid
         fi
 
