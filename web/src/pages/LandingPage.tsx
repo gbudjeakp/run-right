@@ -283,8 +283,11 @@ const S = {
   } as React.CSSProperties,
 
   feature: {
-    textAlign: 'center' as const,
-  },
+    textAlign: 'left' as const,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  } as React.CSSProperties,
 
   featureIcon: {
     fontSize: 28,
