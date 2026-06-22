@@ -15,13 +15,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sgbudje/runright/internal/catalog"
+	"github.com/sgbudje/runright/internal/types"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
-	"github.com/sgbudje/runright/internal/catalog"
-	"github.com/sgbudje/runright/internal/types"
 )
 
 // Config controls how the collector behaves.
@@ -38,6 +38,12 @@ type Config struct {
 	// If nil, no HTTP/callback export occurs.
 	FlushFn func(types.MetricsSummary) error
 }
+
+// maxSnapshotBuffer caps the in-memory snapshot slice for long-running jobs.
+// At the default 5 s interval this is ~13.8 hours of data. When the cap is
+// reached the oldest half is trimmed; peaks are therefore computed over a
+// sliding window rather than the full run lifetime.
+const maxSnapshotBuffer = 10_000
 
 // Collector samples system metrics at a fixed interval.
 type Collector struct {
@@ -112,6 +118,10 @@ func (c *Collector) Run(ctx context.Context) error {
 			}
 			c.mu.Lock()
 			c.snapshots = append(c.snapshots, snap)
+			if len(c.snapshots) > maxSnapshotBuffer {
+				// Trim oldest half; keeps memory bounded for multi-day jobs.
+				c.snapshots = c.snapshots[maxSnapshotBuffer/2:]
+			}
 			c.mu.Unlock()
 		case <-hbCh:
 			c.sendHeartbeat()
@@ -182,8 +192,8 @@ func (c *Collector) collect(t time.Time) (types.MetricSnapshot, error) {
 	elapsed := t.Sub(c.prevTime).Seconds()
 	netIO, err := net.IOCounters(false)
 	if err == nil && len(netIO) > 0 && len(c.baseNetIO) > 0 {
-		snap.NetRxMBs = float64(netIO[0].BytesRecv-c.baseNetIO[0].BytesRecv) / (1<<20) / elapsed
-		snap.NetTxMBs = float64(netIO[0].BytesSent-c.baseNetIO[0].BytesSent) / (1<<20) / elapsed
+		snap.NetRxMBs = float64(netIO[0].BytesRecv-c.baseNetIO[0].BytesRecv) / (1 << 20) / elapsed
+		snap.NetTxMBs = float64(netIO[0].BytesSent-c.baseNetIO[0].BytesSent) / (1 << 20) / elapsed
 		c.baseNetIO = netIO
 	}
 
@@ -197,8 +207,8 @@ func (c *Collector) collect(t time.Time) (types.MetricSnapshot, error) {
 				writeBytes += stat.WriteBytes - base.WriteBytes
 			}
 		}
-		snap.DiskReadMBs = float64(readBytes) / (1<<20) / elapsed
-		snap.DiskWriteMBs = float64(writeBytes) / (1<<20) / elapsed
+		snap.DiskReadMBs = float64(readBytes) / (1 << 20) / elapsed
+		snap.DiskWriteMBs = float64(writeBytes) / (1 << 20) / elapsed
 		c.baseDiskIO = diskIO
 	}
 

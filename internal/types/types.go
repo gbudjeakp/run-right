@@ -28,24 +28,24 @@ type MachineType struct {
 
 // MetricSnapshot is a single point-in-time reading from the metrics agent.
 type MetricSnapshot struct {
-	Timestamp      time.Time `json:"timestamp"`
-	CPUPercent     float64   `json:"cpu_percent"`
-	MemUsedGiB     float64   `json:"mem_used_gib"`
-	MemTotalGiB    float64   `json:"mem_total_gib"`
-	ProcessCount   int       `json:"process_count"`
-	ThreadCount    int       `json:"thread_count"`
-	DiskReadMBs    float64   `json:"disk_read_mbs"`
-	DiskWriteMBs   float64   `json:"disk_write_mbs"`
-	NetRxMBs       float64   `json:"net_rx_mbs"`
-	NetTxMBs       float64   `json:"net_tx_mbs"`
+	Timestamp    time.Time `json:"timestamp"`
+	CPUPercent   float64   `json:"cpu_percent"`
+	MemUsedGiB   float64   `json:"mem_used_gib"`
+	MemTotalGiB  float64   `json:"mem_total_gib"`
+	ProcessCount int       `json:"process_count"`
+	ThreadCount  int       `json:"thread_count"`
+	DiskReadMBs  float64   `json:"disk_read_mbs"`
+	DiskWriteMBs float64   `json:"disk_write_mbs"`
+	NetRxMBs     float64   `json:"net_rx_mbs"`
+	NetTxMBs     float64   `json:"net_tx_mbs"`
 }
 
 // MetricsSummary aggregates a collection of snapshots into peak/avg/p95 values.
 type MetricsSummary struct {
 	JobID           string    `json:"job_id"`
-	RunID           string    `json:"run_id,omitempty"`           // unique per agent invocation; used for upserts
-	Status          string    `json:"status,omitempty"`           // "heartbeat" | "completed"
-	CIPlatform      string    `json:"ci_platform,omitempty"`      // "github" | "jenkins" | "gitlab" | "circleci" | "bitbucket" | "local"
+	RunID           string    `json:"run_id,omitempty"`      // unique per agent invocation; used for upserts
+	Status          string    `json:"status,omitempty"`      // "heartbeat" | "completed"
+	CIPlatform      string    `json:"ci_platform,omitempty"` // "github" | "jenkins" | "gitlab" | "circleci" | "bitbucket" | "local"
 	StartTime       time.Time `json:"start_time"`
 	EndTime         time.Time `json:"end_time"`
 	DurationSeconds float64   `json:"duration_seconds"`
@@ -93,16 +93,16 @@ type KubernetesResources struct {
 
 // Recommendation is a single machine type suggestion with cost and reasoning.
 type Recommendation struct {
-	Machine              MachineType          `json:"machine"`
-	Tier                 RecommendationTier   `json:"tier"`
-	EstimatedMonthly     float64              `json:"estimated_monthly_usd"`
-	SpotMonthly          float64              `json:"spot_monthly_usd"`
-	CurrentMonthly       float64              `json:"current_monthly_usd"`
-	CostDeltaPercent     float64              `json:"cost_delta_percent"`
-	SpotDeltaPercent     float64              `json:"spot_delta_percent"`
-	RequiredVCPUs        int                  `json:"required_vcpus"`
-	RequiredMemoryGiB    float64              `json:"required_memory_gib"`
-	Reasoning            string               `json:"reasoning"`
-	DurationRegressionPct *float64            `json:"duration_regression_pct,omitempty"`
-	KubernetesResources  *KubernetesResources `json:"kubernetes_resources,omitempty"`
+	Machine               MachineType          `json:"machine"`
+	Tier                  RecommendationTier   `json:"tier"`
+	EstimatedMonthly      float64              `json:"estimated_monthly_usd"`
+	SpotMonthly           float64              `json:"spot_monthly_usd"`
+	CurrentMonthly        float64              `json:"current_monthly_usd"`
+	CostDeltaPercent      float64              `json:"cost_delta_percent"`
+	SpotDeltaPercent      float64              `json:"spot_delta_percent"`
+	RequiredVCPUs         int                  `json:"required_vcpus"`
+	RequiredMemoryGiB     float64              `json:"required_memory_gib"`
+	Reasoning             string               `json:"reasoning"`
+	DurationRegressionPct *float64             `json:"duration_regression_pct,omitempty"`
+	KubernetesResources   *KubernetesResources `json:"kubernetes_resources,omitempty"`
 }

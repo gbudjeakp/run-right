@@ -1,0 +1,34 @@
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+  pull_request:
+    paths:
+      - "terraform/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir:
+          - terraform
+          - terraform/gke
+          - terraform/eks
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt
+        run: terraform -chdir=${{ matrix.dir }} fmt -check -recursive
+
+      - name: terraform init
+        run: terraform -chdir=${{ matrix.dir }} init -backend=false
+
+      - name: terraform validate
+        run: terraform -chdir=${{ matrix.dir }} validate
