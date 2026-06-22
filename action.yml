@@ -199,14 +199,23 @@ runs:
         SUMMARY="${{ inputs.output-dir }}/metrics-summary.json"
 
         if [[ ! -f "$SUMMARY" ]]; then
-          if [[ "${RUNRIGHT_UNEXPECTED_EXIT:-0}" == "1" ]]; then
-            echo "::error::RunRight: No metrics were collected — the monitor was killed before it could write results."
-            echo "::notice::This usually means the runner ran out of memory (OOM) or was force-stopped."
-            echo "::notice::Suggestions: (1) Check your runner is still online. (2) Try a larger instance type for this job."
+          HEARTBEAT="${{ inputs.output-dir }}/metrics-heartbeat.json"
+          if [[ -f "$HEARTBEAT" ]] && [[ "${RUNRIGHT_UNEXPECTED_EXIT:-0}" == "1" ]]; then
+            echo "::warning::RunRight: Job was interrupted before completion. Using partial metrics from last heartbeat checkpoint for best-effort recommendation."
+            SUMMARY="$HEARTBEAT"
+            # Fall through — recommendations will run on the heartbeat data below.
+          elif [[ "${RUNRIGHT_UNEXPECTED_EXIT:-0}" == "1" ]]; then
+            # Killed before the first heartbeat (< 30s) — detect current machine specs.
+            VCPUS=$(nproc 2>/dev/null || echo "?")
+            MEM_KB=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
+            MEM_GIB=$(python3 -c "print(round(${MEM_KB:-0}/1048576,1))" 2>/dev/null || echo "?")
+            echo "::error::RunRight: Monitor was killed before collecting any metrics (likely OOM or force-stop)."
+            echo "::notice::Detected runner: ${VCPUS} vCPU / ${MEM_GIB} GiB RAM. The job exceeded this machine's capacity. Check your runner is online and consider upgrading to a larger instance type."
+            exit 0
           else
             echo "No metrics-summary.json found at $SUMMARY, skipping recommendations."
+            exit 0
           fi
-          exit 0
         fi
 
         # Generate recommendations as JSON.

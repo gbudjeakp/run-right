@@ -27,9 +27,12 @@ import (
 // Config controls how the collector behaves.
 type Config struct {
 	Interval          time.Duration
-	HeartbeatInterval time.Duration // how often to send partial data; 0 = 30s when FlushFn is set
+	HeartbeatInterval time.Duration // how often to send partial data; 0 = 30s when FlushFn or HeartbeatFilePath is set
 	OutputDir         string
 	JobID             string
+	// HeartbeatFilePath, if non-empty, is written on every heartbeat tick so that
+	// partial metrics survive an OOM-kill or force-stop of the monitor process.
+	HeartbeatFilePath string
 	// FlushFn is called on every heartbeat and on the final flush.
 	// The summary Status will be "heartbeat" or "completed" accordingly.
 	// If nil, no HTTP/callback export occurs.
@@ -85,11 +88,11 @@ func (c *Collector) Run(ctx context.Context) error {
 	// Heartbeat: periodically send partial data so the backend has a record even
 	// if the agent is killed (OOM, runner disconnect) before the final Flush.
 	hbInterval := c.cfg.HeartbeatInterval
-	if hbInterval <= 0 && c.cfg.FlushFn != nil {
+	if hbInterval <= 0 && (c.cfg.FlushFn != nil || c.cfg.HeartbeatFilePath != "") {
 		hbInterval = 30 * time.Second
 	}
 	var hbCh <-chan time.Time
-	if hbInterval > 0 && c.cfg.FlushFn != nil {
+	if hbInterval > 0 && (c.cfg.FlushFn != nil || c.cfg.HeartbeatFilePath != "") {
 		hb := time.NewTicker(hbInterval)
 		defer hb.Stop()
 		hbCh = hb.C
@@ -117,8 +120,8 @@ func (c *Collector) Run(ctx context.Context) error {
 }
 
 // sendHeartbeat posts the current partial summary to FlushFn with Status="heartbeat".
-// If the agent is OOM-killed or the runner disconnects before Flush() runs, the
-// backend retains the last heartbeat record rather than losing all data.
+// It also writes a metrics-heartbeat.json file if HeartbeatFilePath is configured,
+// so that partial metrics survive an OOM-kill or force-stop of the monitor process.
 func (c *Collector) sendHeartbeat() {
 	c.mu.Lock()
 	snaps := make([]types.MetricSnapshot, len(c.snapshots))
@@ -132,7 +135,21 @@ func (c *Collector) sendHeartbeat() {
 	if v, m := detectResources(); v > 0 && m > 0 {
 		summary.DetectedMachine = catalog.DetectMachine(v, m)
 	}
-	_ = c.cfg.FlushFn(summary) // best-effort; ignore error on heartbeat
+
+	// Write partial file so OOM-killed jobs still have data for recommendations.
+	if c.cfg.HeartbeatFilePath != "" {
+		_ = os.MkdirAll(filepath.Dir(c.cfg.HeartbeatFilePath), 0o755)
+		if f, err := os.Create(c.cfg.HeartbeatFilePath); err == nil {
+			enc := json.NewEncoder(f)
+			enc.SetIndent("", "  ")
+			_ = enc.Encode(summary)
+			_ = f.Close()
+		}
+	}
+
+	if c.cfg.FlushFn != nil {
+		_ = c.cfg.FlushFn(summary) // best-effort; ignore error on heartbeat
+	}
 }
 
 func (c *Collector) collect(t time.Time) (types.MetricSnapshot, error) {
