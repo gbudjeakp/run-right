@@ -23,18 +23,9 @@ Grafana, Datadog, and Sentry tell you how your application behaves. They do not 
 
 ## In action
 
-<p align="center"><sub>Per-run CPU & memory samples</sub></p>
+<p align="center"><sub>Live product tour: dashboard, run insights, recommendations, and job history</sub></p>
 <p align="center">
-  <img src=".github/screenshots/ss-04.png" width="49%" alt="Run detail: CPU and memory metrics" />
-  <img src=".github/screenshots/ss-05.png" width="49%" alt="Recommendations: right-sized, cheaper-option, more-headroom tiers" />
-</p>
-
-<p align="center"><sub>Instance recommendations by tier: right-sized / cheaper-option / more-headroom</sub></p>
-
-<p align="center"><sub>All jobs · Run history per job</sub></p>
-<p align="center">
-  <img src=".github/screenshots/ss-01.png" width="49%" alt="Jobs list" />
-  <img src=".github/screenshots/ss-09.png" width="49%" alt="Job detail: run history" />
+  <img src=".github/screenshots/readme-carousel.gif" width="98%" alt="RunRight UI carousel: jobs, run detail, recommendations, and history" />
 </p>
 
 <p align="center"><sub>Pipe your data into Grafana, Datadog, or any metrics tool. Raw runs land in Postgres.</sub></p>
