@@ -16,10 +16,10 @@ Grafana, Datadog, and Sentry tell you how your application behaves. They do not 
 
 ### Key Features
 
-- **🔌 No code changes.** Runs as a sidecar—not an SDK or agent you instrument. Drop it in any CI pipeline.
-- **⚡ Minimal overhead.** Polls `/proc` every 5s. Footprint: under 5 MB RSS, under 0.1% CPU. Your builds stay fast.
-- **🎯 Actionable insights.** Get specific instance recommendations with cost delta and tier labels—no graphs to interpret.
-- **🔗 Works with your stack.** Exports via OTLP, Prometheus, or JSON. Integrates with Datadog, Grafana Cloud, or any observability tool.
+- **No code changes.** Runs as a sidecar—not an SDK or agent you instrument. Drop it in any CI pipeline.
+- **Minimal overhead.** Polls `/proc` every 5s. Footprint: under 5 MB RSS, under 0.1% CPU. Your builds stay fast.
+- **Actionable insights.** Get specific instance recommendations with cost delta and tier labels—no graphs to interpret.
+- **Works with your stack.** Exports via OTLP, Prometheus, or JSON. Integrates with Datadog, Grafana Cloud, or any observability tool.
 
 ---
 
