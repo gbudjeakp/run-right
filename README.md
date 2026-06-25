@@ -12,12 +12,14 @@
 
 ## Why RunRight
 
-Grafana, Datadog, and Sentry tell you how your application behaves. They do not tell you whether you are paying for the right machine. RunRight answers that one question: given your actual p95 CPU and memory usage, what is the cheapest specific AWS or GCP instance type that still leaves headroom?
+Grafana, Datadog, and Sentry tell you how your application behaves. They do not tell you whether you are paying for the right machine. **RunRight solves that: given your actual p95 CPU and memory usage, it recommends the cheapest AWS or GCP instance type that still fits your workload.**
 
-- **No code changes.** It runs as a sidecar process, not an SDK or agent you instrument your app with.
-- **Minimal overhead.** Polls `/proc` via gopsutil at a configurable interval (default 5s). Typical footprint: under 5 MB RSS, under 0.1% CPU on the sampler process. Your build time is not affected.
-- **Actionable output.** Instead of a graph you have to interpret, you get a specific instance recommendation with a cost delta and a tier label.
-- **Works with what you have.** Exports via OTLP, Prometheus, or flat JSON. If you already ship metrics to Datadog or Grafana Cloud, RunRight plugs straight in.
+### Key Features
+
+- **🔌 No code changes.** Runs as a sidecar—not an SDK or agent you instrument. Drop it in any CI pipeline.
+- **⚡ Minimal overhead.** Polls `/proc` every 5s. Footprint: under 5 MB RSS, under 0.1% CPU. Your builds stay fast.
+- **🎯 Actionable insights.** Get specific instance recommendations with cost delta and tier labels—no graphs to interpret.
+- **🔗 Works with your stack.** Exports via OTLP, Prometheus, or JSON. Integrates with Datadog, Grafana Cloud, or any observability tool.
 
 ---
 
