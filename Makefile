@@ -10,7 +10,7 @@ PLATFORMS := \
 	windows/amd64
 
 .PHONY: build build-all build-linux build-linux-amd64 build-linux-arm64 \
-        test lint clean run-server docker-up docker-down catalog-update seed deploy
+	test lint clean run-server docker-up docker-down catalog-update seed deploy bench-agent
 
 build:
 	go build $(BUILD_FLAGS) -o bin/$(BINARY) $(CMD_DIR)
@@ -91,3 +91,6 @@ web-build:
 
 tidy:
 	go mod tidy
+
+bench-agent:
+	./scripts/bench-agent.sh

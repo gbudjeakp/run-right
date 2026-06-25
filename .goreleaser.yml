@@ -42,6 +42,27 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# Generate a Software Bill of Materials (SBOM) for each archive using syft.
+sboms:
+  - artifacts: archive
+    args: ["$artifact", "--output", "spdx-json=$document"]
+    documents:
+      - "{{ .ArtifactName }}.spdx.json"
+
+# Sign the checksums file with cosign (keyless OIDC — no long-lived key needed).
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    artifacts: checksum
+    output: true
+    args:
+      - sign-blob
+      - --yes
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+
 release:
   github:
     owner: gbudjeakp

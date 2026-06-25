@@ -13,7 +13,18 @@ const (
 	memHeadroomFactor = 1.30 // 30% headroom above p95 memory — OOM kills are more disruptive than slowdown
 	hoursPerMonth     = 720.0
 )
-
+func spotRiskFromInterruptionRate(ratePct float64) string {
+	if ratePct <= 0 {
+		return ""
+	}
+	if ratePct < 5 {
+		return "low"
+	}
+	if ratePct <= 15 {
+		return "medium"
+	}
+	return "high"
+}
 // Recommend returns a ranked list of machine recommendations based on observed
 // job metrics and the provided machine catalog.
 func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []types.Recommendation {
@@ -55,13 +66,21 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 		}
 		tier := classifyTier(m, detected, requiredVCPUs, requiredMemGiB)
 		estimatedMonthly := m.OnDemandPricePerHour * hoursPerMonth
-		spotMonthly := estimatedMonthly * spotDiscount(m.Provider)
+		spotMonthly := 0.0
 		deltaPercent := 0.0
 		spotDeltaPercent := 0.0
 		if currentMonthly > 0 {
 			deltaPercent = ((estimatedMonthly - currentMonthly) / currentMonthly) * 100
-			spotDeltaPercent = ((spotMonthly - currentMonthly) / currentMonthly) * 100
+			if m.SpotPricePerHour > 0 {
+				spotMonthly = m.SpotPricePerHour * hoursPerMonth
+				spotDeltaPercent = ((spotMonthly - currentMonthly) / currentMonthly) * 100
+			}
 		}
+		spotRisk := m.SpotRisk
+		if spotRisk == "" {
+			spotRisk = spotRiskFromInterruptionRate(m.SpotInterruptionRatePct)
+		}
+		durationRiskNote := buildDurationRiskNote(m, detected, requiredVCPUs)
 		results = append(results, types.Recommendation{
 			Machine:             m,
 			Tier:                tier,
@@ -73,6 +92,8 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 			RequiredVCPUs:       requiredVCPUs,
 			RequiredMemoryGiB:   requiredMemGiB,
 			Reasoning:           buildReasoning(m, summary, requiredVCPUs, requiredMemGiB),
+			DurationRiskNote:    durationRiskNote,
+			SpotRisk:            spotRisk,
 			KubernetesResources: buildK8sResources(summary, requiredVCPUs, requiredMemGiB),
 		})
 	}
@@ -184,13 +205,22 @@ func cap(results []types.Recommendation) []types.Recommendation {
 	return out
 }
 
-// spotDiscount returns the approximate fraction of on-demand price for spot/preemptible
-// instances. AWS spot is ~30% of on-demand; GCP preemptible is ~20% of on-demand.
-func spotDiscount(provider types.Provider) float64 {
-	switch provider {
-	case types.ProviderGCP:
-		return 0.20
-	default: // AWS and others
-		return 0.30
+// buildDurationRiskNote returns a non-empty note when the recommended machine has
+// significantly fewer vCPUs than the current one, flagging a possible build slowdown.
+func buildDurationRiskNote(m types.MachineType, detected *types.MachineType, reqVCPUs int) string {
+	if detected == nil || detected.VCPUs <= 0 {
+		return ""
 	}
+	// Only warn when the candidate machine has <50% of the current vCPU count.
+	if float64(m.VCPUs)/float64(detected.VCPUs) >= 0.5 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"Recommended %d vCPUs vs current %d vCPUs (%.0f%% reduction). "+
+			"CPU-bound steps (compilation, test parallelism) may run slower. "+
+			"Validate with a benchmark run before committing to this machine type.",
+		m.VCPUs, detected.VCPUs,
+		(1-float64(m.VCPUs)/float64(detected.VCPUs))*100,
+	)
 }
+

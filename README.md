@@ -177,6 +177,24 @@ go test ./internal/...
 cd web && pnpm dev
 ```
 
+### Backend Hot Reload (Docker)
+
+Use the dev profile to run the backend with live reload via Air:
+
+```bash
+docker compose up -d postgres dashboard
+docker compose --profile dev up -d backend-dev
+```
+
+Now backend code changes reload automatically. You do not need `docker compose down` each time.
+
+If `backend` is already running, stop only that service first:
+
+```bash
+docker compose stop backend
+docker compose rm -f backend
+```
+
 ---
 
 Elastic License 2.0 (ELv2). See [LICENSE](LICENSE)

@@ -60,6 +60,26 @@ inputs:
     description: "Filter recommendations by cloud provider: aws, gcp, or github (default: all)"
     required: false
     default: ""
+  max-cost-per-hour:
+    description: "Budget guard: fail the step if the detected machine's on-demand price exceeds this value (e.g. 0.50). Empty = disabled."
+    required: false
+    default: ""
+  notify-slack:
+    description: "Slack incoming webhook URL. When set, posts a per-job saving alert on completion."
+    required: false
+    default: ""
+  notify-teams:
+    description: "Microsoft Teams incoming webhook URL. When set, posts a per-job saving alert on completion."
+    required: false
+    default: ""
+  dry-run:
+    description: "Observation-only mode: collect metrics and log recommendations but skip PR comments and artifact uploads."
+    required: false
+    default: "false"
+  rollup:
+    description: "Combine all RunRight PR comments for this workflow into a single comment table (one row per job)."
+    required: false
+    default: "false"
 
 outputs:
   recommendation-json:
@@ -96,6 +116,8 @@ runs:
         RUNRIGHT_OUTPUT_DIR: ${{ inputs.output-dir }}
         RUNRIGHT_JOB_ID: ${{ inputs.job-id }}
         RUNRIGHT_HTTP_URL: ${{ inputs.http-url }}
+        RUNRIGHT_SLACK_WEBHOOK: ${{ inputs.notify-slack }}
+        RUNRIGHT_TEAMS_WEBHOOK: ${{ inputs.notify-teams }}
       run: bash "$GITHUB_ACTION_PATH/scripts/monitor-start.sh"
 
     - name: Run wrapped command
@@ -118,6 +140,8 @@ runs:
         RUNRIGHT_OUTPUT_DIR: ${{ inputs.output-dir }}
         RUNRIGHT_JOB_ID: ${{ inputs.job-id }}
         RUNRIGHT_HTTP_URL: ${{ inputs.http-url }}
+        RUNRIGHT_SLACK_WEBHOOK: ${{ inputs.notify-slack }}
+        RUNRIGHT_TEAMS_WEBHOOK: ${{ inputs.notify-teams }}
       run: bash "$GITHUB_ACTION_PATH/scripts/monitor-start.sh"
 
     # ── Standalone: stop step ─────────────────────────────────────────────────
@@ -135,6 +159,9 @@ runs:
         RUNRIGHT_OUTPUT_DIR: ${{ inputs.output-dir }}
         RUNRIGHT_JOB_ID: ${{ inputs.job-id }}
         RUNRIGHT_PROVIDER: ${{ inputs.provider }}
+        RUNRIGHT_HTTP_URL: ${{ inputs.http-url }}
+        RUNRIGHT_MAX_COST_PER_HOUR: ${{ inputs.max-cost-per-hour }}
+        RUNRIGHT_DRY_RUN: ${{ inputs.dry-run }}
       run: bash "$GITHUB_ACTION_PATH/scripts/recommend.sh"
 
     # ── PR comment ────────────────────────────────────────────────────────────
@@ -143,11 +170,13 @@ runs:
       if: |
         (inputs.step == 'stop' || inputs.run != '') &&
         inputs.pr-comment == 'true' &&
+        inputs.dry-run != 'true' &&
         github.event_name == 'pull_request'
       uses: actions/github-script@v7
       env:
         COMMENT_FILE: /tmp/runright-pr-comment.md
         JOB_LABEL: ${{ inputs.job-id }}
+        ROLLUP_MODE: ${{ inputs.rollup }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -156,10 +185,13 @@ runs:
           if (!fs.existsSync(commentPath)) { return }
 
           const body = fs.readFileSync(commentPath, 'utf8')
-          const marker = `<!-- runright:${process.env.JOB_LABEL} -->`
+          const rollup = process.env.ROLLUP_MODE === 'true'
+          const jobLabel = process.env.JOB_LABEL
 
-          // Find an existing RunRight comment for this job so we update instead
-          // of creating a new comment on every push to the PR branch.
+          // In rollup mode all jobs in the same workflow share a single comment.
+          // In per-job mode each job has its own comment keyed by job-id.
+          const marker = rollup ? `<!-- runright:rollup -->` : `<!-- runright:${jobLabel} -->`
+
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -167,26 +199,45 @@ runs:
           })
           const existing = comments.find(c => c.body.includes(marker))
 
+          let newBody = body
+          if (rollup && existing) {
+            // Each job upserts its own fenced block inside the shared comment.
+            const jobMarker = `<!-- runright-job:${jobLabel} -->`
+            const endMarker = `<!-- /runright-job:${jobLabel} -->`
+            const jobBlock = `${jobMarker}\n${body}\n${endMarker}`
+            if (existing.body.includes(jobMarker)) {
+              newBody = existing.body.replace(
+                new RegExp(`${jobMarker}[\\s\\S]*?${endMarker}`),
+                jobBlock
+              )
+            } else {
+              newBody = existing.body + '\n\n---\n\n' + jobBlock
+            }
+          }
+
           if (existing) {
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               comment_id: existing.id,
-              body,
+              body: newBody,
             })
           } else {
+            const postBody = rollup
+              ? `${marker}\n\n<!-- runright-job:${jobLabel} -->\n${body}\n<!-- /runright-job:${jobLabel} -->`
+              : body
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              body,
+              body: postBody,
             })
           }
 
     # ── Upload artifact ───────────────────────────────────────────────────────
     - name: Upload metrics artifact
       id: upload
-      if: (inputs.step == 'stop' || inputs.run != '') && inputs.upload-artifact == 'true'
+      if: (inputs.step == 'stop' || inputs.run != '') && inputs.upload-artifact == 'true' && inputs.dry-run != 'true'
       uses: actions/upload-artifact@v4
       with:
         name: runright-metrics-${{ inputs.job-id }}

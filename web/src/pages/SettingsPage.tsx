@@ -1,25 +1,34 @@
 import { useState, useEffect } from 'react'
+import { CURRENCY_OPTIONS, type CurrencyCode, useCurrencyPreference } from '../currency'
 
 export default function SettingsPage() {
+  const { currency, setCurrency } = useCurrencyPreference()
   const [otelEndpoint, setOtelEndpoint] = useState('')
+  const [preferredCurrency, setPreferredCurrency] = useState<CurrencyCode>(currency)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     setOtelEndpoint(localStorage.getItem('runright_otel_endpoint') ?? '')
   }, [])
 
+  useEffect(() => {
+    setPreferredCurrency(currency)
+  }, [currency])
+
   function save(e: React.FormEvent) {
     e.preventDefault()
     if (otelEndpoint) localStorage.setItem('runright_otel_endpoint', otelEndpoint)
     else localStorage.removeItem('runright_otel_endpoint')
+    setCurrency(preferredCurrency)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
 
+
   return (
     <div className="fadein">
-      <h1>Settings</h1>
-      <div className="card">
+      <h1 className="font-serif text-2xl sm:text-3xl font-black text-[var(--text)] mb-7 tracking-tight">Settings</h1>
+      <div className="rr-card">
         <form className="settings-form" onSubmit={save}>
           <div className="form-group">
             <label>OpenTelemetry Endpoint</label>
@@ -29,21 +38,36 @@ export default function SettingsPage() {
               value={otelEndpoint}
               onChange={(e) => setOtelEndpoint(e.target.value)}
             />
-            <p style={{ fontSize: 12, color: '#718096', marginTop: 6 }}>
+            <p className="text-xs text-[var(--text-light)] mt-1.5">
               Set this in your CI job as <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and pass <code>--export otlp</code> to <code>runright monitor</code>.
             </p>
           </div>
-          <button className="btn" type="submit">Save</button>
-          {saved && <span style={{ marginLeft: 16, fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 15, letterSpacing: 2, color: '#2E7D32' }}>✓ Saved</span>}
+          <div className="form-group">
+            <label>Display Currency</label>
+            <select
+              className="rr-select"
+              value={preferredCurrency}
+              onChange={(e) => setPreferredCurrency(e.target.value as CurrencyCode)}
+            >
+              {CURRENCY_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>{option.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-[var(--text-light)] mt-1.5">
+              Affects all dashboard money values. Conversion is applied from USD using built-in reference rates.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap">
+            <button className="btn-rr" type="submit">Save</button>
+              {saved && <span className="font-deco text-[15px] tracking-[2px] text-[#2E7D32]">Saved</span>}
+          </div>
         </form>
       </div>
 
-      <div className="card">
-        <h2>Usage</h2>
-        <p style={{ fontSize: 14, color: '#a0aec0', lineHeight: 1.7 }}>
-          Add to your GitHub Actions workflow:
-        </p>
-        <pre style={{ background: '#1A0F02', border: '1px solid #3a2510', borderLeft: '3px solid #B8860B', padding: 16, marginTop: 12, fontSize: 12, overflowX: 'auto', color: '#D4A82A', fontFamily: "'Courier New', monospace", lineHeight: 2 }}>{`# Standalone mode
+      <div className="rr-card">
+        <h2 className="font-serif text-[17px] font-bold text-[var(--text)] mb-3">Usage</h2>
+        <p className="text-sm text-[var(--text-light)] leading-relaxed">RunRight works with GitHub Actions, GitLab CI, Jenkins, CircleCI, and any CI platform. Here's an example:</p>
+        <pre className="bg-[#1A0F02] border border-[#3a2510] border-l-[3px] border-l-gold px-4 py-4 mt-3 text-xs overflow-x-auto text-gold-light font-mono leading-loose">{`# Standalone mode
 - uses: sgbudje/runright@v1
   with:
     step: start
@@ -57,10 +81,8 @@ export default function SettingsPage() {
     http-url: https://your-runright-backend.example.com
     export: file,http`}
         </pre>
-        <p style={{ fontSize: 14, color: '#a0aec0', lineHeight: 1.7, marginTop: 16 }}>
-          Or use wrapper mode:
-        </p>
-        <pre style={{ background: '#1A0F02', border: '1px solid #3a2510', borderLeft: '3px solid #B8860B', padding: 16, marginTop: 12, fontSize: 12, overflowX: 'auto', color: '#D4A82A', fontFamily: "'Courier New', monospace", lineHeight: 2 }}>{`# Wrapper mode
+        <p className="text-sm text-[var(--text-light)] leading-relaxed mt-4">Or use wrapper mode:</p>
+        <pre className="bg-[#1A0F02] border border-[#3a2510] border-l-[3px] border-l-gold px-4 py-4 mt-3 text-xs overflow-x-auto text-gold-light font-mono leading-loose">{`# Wrapper mode
 - uses: sgbudje/runright@v1
   with:
     run: make build

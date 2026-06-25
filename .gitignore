@@ -55,3 +55,7 @@ logs/
 # Test artifacts
 .runright/
 metrics-summary.json
+
+# Local benchmark and temp artifacts
+tmp/
+scripts/bench-agent.sh

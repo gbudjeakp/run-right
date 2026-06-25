@@ -30,7 +30,7 @@ func main() {
 			log.Printf("FAIL %s: %v", j.Summary.JobID, err)
 			fail++
 		} else {
-			fmt.Printf("  ✓  %s  (%.0fs, cpu p95 %.1f%%, mem p95 %.2f GiB)\n",
+			fmt.Printf("  OK  %s  (%.0fs, cpu p95 %.1f%%, mem p95 %.2f GiB)\n",
 				j.Summary.JobID,
 				j.Summary.DurationSeconds,
 				j.Summary.CPUPercentP95,
@@ -123,6 +123,38 @@ var gcpN2Standard2 = types.MachineType{
 	VCPUs: 2, MemoryGiB: 8, NetworkGbps: 10, StorageType: "pd-balanced",
 	Architecture: "x86_64", OnDemandPricePerHour: 0.0971,
 	Tags: []string{"latest-gen"},
+}
+
+var awsC7g2XLarge = types.MachineType{
+	ID: "c7g.2xlarge", Provider: types.ProviderAWS,
+	Family: "compute-optimized", Series: "c7g",
+	VCPUs: 8, MemoryGiB: 16, NetworkGbps: 12.5, StorageType: "ebs",
+	Architecture: "arm64", OnDemandPricePerHour: 0.58,
+	Tags: []string{"graviton", "arm64", "compute-optimized"},
+}
+
+var awsP32XLarge = types.MachineType{
+	ID: "p3.2xlarge", Provider: types.ProviderAWS,
+	Family: "gpu-accelerated", Series: "p3",
+	VCPUs: 8, MemoryGiB: 61, NetworkGbps: 10, StorageType: "ebs",
+	Architecture: "x86_64", OnDemandPricePerHour: 3.06,
+	Tags: []string{"gpu", "ml-training", "expensive"},
+}
+
+var awsG4dn12XLarge = types.MachineType{
+	ID: "g4dn.12xlarge", Provider: types.ProviderAWS,
+	Family: "gpu-accelerated", Series: "g4dn",
+	VCPUs: 48, MemoryGiB: 192, NetworkGbps: 100, StorageType: "ebs",
+	Architecture: "x86_64", OnDemandPricePerHour: 7.48,
+	Tags: []string{"gpu", "inference", "very-expensive"},
+}
+
+var awsP4d24XLarge = types.MachineType{
+	ID: "p4d.24xlarge", Provider: types.ProviderAWS,
+	Family: "gpu-accelerated", Series: "p4d",
+	VCPUs: 96, MemoryGiB: 1152, NetworkGbps: 400, StorageType: "ebs",
+	Architecture: "x86_64", OnDemandPricePerHour: 32.77,
+	Tags: []string{"gpu", "ml-training", "most-expensive"},
 }
 
 // rng is a seeded random source for reproducible jitter.
@@ -220,6 +252,41 @@ func buildJobs() []payload {
 			jitter(22, 4), jitter(0.8, 0.08), jitter(68, 12)))
 	}
 
+	// ── "ml-training" job: Heavy compute-optimized, runs weekly ──────────────
+	// Uses c7g.2xlarge but only at 25% CPU most of the time.
+	// Huge opportunity to downsize to m6i.xlarge or c7g.xlarge.
+	for i := 27; i >= 0; i -= 7 {
+		t := now.AddDate(0, 0, -i).Add(4 * time.Hour)
+		jobs = append(jobs, makeJob("ml-training", "jenkins", t, awsC7g2XLarge,
+			jitter(23, 5), jitter(2.5, 0.3), jitter(14400, 1200))) // 4 hours = 14400 seconds
+	}
+
+	// ── "gpu-inference" job: p4d.24xlarge (most expensive) but only 15% util ──
+	// Runs every day, 4 hours each. Massive downsize opportunity.
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(6 * time.Hour)
+		jobs = append(jobs, makeJob("gpu-inference", "jenkins", t, awsP4d24XLarge,
+			jitter(14, 3), jitter(120, 15), jitter(14400, 1500))) // 4 hours, low GPU util
+	}
+
+	// ── "ml-batch" job: p3.2xlarge but only 25% GPU util, every 2 days ───────
+	// 6-hour training runs with plenty of headroom.
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(2 * time.Hour)
+		jobs = append(jobs, makeJob("ml-batch", "jenkins", t, awsP32XLarge,
+			jitter(24, 4), jitter(15, 2), jitter(21600, 1800))) // 6 hours
+	}
+
+	// ── "data-transform" job: g4dn.12xlarge but only 20% GPU util, 3x/week ────
+	// Long-running data pipeline with spare capacity.
+	for i := 28; i >= 0; i -= 2 {
+		if i%3 == 0 { // 3x per week (~10 times per month)
+			t := now.AddDate(0, 0, -i).Add(14 * time.Hour)
+			jobs = append(jobs, makeJob("data-transform", "jenkins", t, awsG4dn12XLarge,
+				jitter(19, 4), jitter(40, 8), jitter(28800, 2400))) // 8 hours
+		}
+	}
+
 	// ── Interrupted runs ─────────────────────────────────────────────────────
 	// Status="heartbeat" simulates jobs where the agent never sent a final
 	// "completed" flush — either OOM-killed (SIGKILL) or runner disconnected.
@@ -273,6 +340,7 @@ func makeJob(
 	summary := types.MetricsSummary{
 		JobID:           jobID,
 		CIPlatform:      ciPlatform,
+		Repository:      seededRepository(jobID),
 		StartTime:       start,
 		EndTime:         end,
 		DurationSeconds: durationSec,
@@ -302,6 +370,19 @@ func makeJob(
 	return payload{Summary: summary, Recommendations: recs}
 }
 
+func seededRepository(jobID string) string {
+	switch jobID {
+	case "build", "unit-tests", "integration-tests", "docker-build", "lint", "security-scan":
+		return "runrightio/app-core"
+	case "e2e-tests", "deploy-staging":
+		return "runrightio/web-ui"
+	case "benchmark", "gcp-build", "python-tests", "ml-training", "gpu-inference", "ml-batch", "data-transform":
+		return "runrightio/data-pipeline"
+	default:
+		return ""
+	}
+}
+
 // recommend generates plausible recommendations based on the summary.
 func recommend(s types.MetricsSummary, detected types.MachineType, currentMonthly float64) []types.Recommendation {
 	cpuPct := s.CPUPercentP95
@@ -311,6 +392,31 @@ func recommend(s types.MetricsSummary, detected types.MachineType, currentMonthl
 
 	// Right-sized: best fit for the workload
 	switch {
+	case detected.ID == "p4d.24xlarge" && cpuPct < 20:
+		// Way over-provisioned GPU: downsize dramatically
+		recs = append(recs, rec(awsP32XLarge, types.TierCheaper, currentMonthly))  // $3.06/hr vs $32.77/hr
+		recs = append(recs, rec(awsG4dn12XLarge, types.TierRightSized, currentMonthly)) // $7.48/hr
+		recs = append(recs, rec(awsP4d24XLarge, types.TierMoreHeadroom, currentMonthly))
+
+	case detected.ID == "p3.2xlarge" && cpuPct < 30:
+		// Over-provisioned GPU: downsize to smaller GPU or compute
+		recs = append(recs, rec(awsC7gLarge, types.TierCheaper, currentMonthly))
+		recs = append(recs, rec(awsM6iLarge, types.TierRightSized, currentMonthly))
+		recs = append(recs, rec(awsP32XLarge, types.TierMoreHeadroom, currentMonthly))
+
+	case detected.ID == "g4dn.12xlarge" && cpuPct < 25:
+		// Over-provisioned GPU: downsize to smaller GPU
+		gdn4XL := types.MachineType{
+			ID: "g4dn.xlarge", Provider: types.ProviderAWS,
+			Family: "gpu-accelerated", Series: "g4dn",
+			VCPUs: 4, MemoryGiB: 16, NetworkGbps: 25, StorageType: "ebs",
+			Architecture: "x86_64", OnDemandPricePerHour: 0.526,
+			Tags: []string{"gpu", "inference"},
+		}
+		recs = append(recs, rec(gdn4XL, types.TierCheaper, currentMonthly))
+		recs = append(recs, rec(awsM6iLarge, types.TierRightSized, currentMonthly))
+		recs = append(recs, rec(awsG4dn12XLarge, types.TierMoreHeadroom, currentMonthly))
+
 	case cpuPct < 20 && memGiB < 0.8:
 		// Very light — suggest t3.nano → not in our set, use t3.small equivalent
 		m := types.MachineType{
@@ -327,6 +433,12 @@ func recommend(s types.MetricsSummary, detected types.MachineType, currentMonthl
 		recs = append(recs, rec(awsM6iLarge, types.TierRightSized, currentMonthly))
 		recs = append(recs, rec(awsC7gLarge, types.TierCheaper, currentMonthly))
 		recs = append(recs, rec(awsT3Large, types.TierMoreHeadroom, currentMonthly))
+
+	case detected.ID == "c7g.2xlarge" && cpuPct < 30:
+		// Over-provisioned compute: downsize significantly
+		recs = append(recs, rec(awsC7gLarge, types.TierCheaper, currentMonthly))
+		recs = append(recs, rec(awsM6iLarge, types.TierRightSized, currentMonthly))
+		recs = append(recs, rec(awsC7g2XLarge, types.TierMoreHeadroom, currentMonthly))
 
 	default:
 		// Moderate — current is okay but cheaper options exist

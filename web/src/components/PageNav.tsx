@@ -1,11 +1,9 @@
 import { Link } from 'react-router-dom'
 import LogoMark from './LogoMark'
-import './PageNav.css'
 
 interface Props {
   dark: boolean
   onToggleDark: () => void
-  /** Called when Sign In is clicked. If omitted, renders a Link to /login. */
   onSignIn?: () => void
 }
 
@@ -16,7 +14,6 @@ function GitHubIcon() {
     </svg>
   )
 }
-
 function MoonIcon() {
   return (
     <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -24,52 +21,44 @@ function MoonIcon() {
     </svg>
   )
 }
-
 function SunIcon() {
   return (
     <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="5" />
       <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
     </svg>
   )
 }
 
 export default function PageNav({ dark, onToggleDark, onSignIn }: Props) {
+  const linkCls = 'font-deco text-[13px] tracking-[1.5px] text-[var(--text-mid)] hover:text-[var(--text)] no-underline transition-colors'
   return (
-    <nav className="pnav">
-      <Link to="/" className="pnav-logo">
+    <nav className="flex items-center justify-between px-5 sm:px-8 py-4 bg-[var(--paper)] border-b border-[var(--border)] shadow-sm">
+      <Link to="/" className="flex items-center gap-2 no-underline">
         <LogoMark size={18} color={dark ? '#FBF0DC' : '#2C1A0E'} />
-        RUNRIGHT
+        <span className="font-deco text-[17px] tracking-[3px] text-[var(--text)]">RUNRIGHT</span>
       </Link>
-
-      <div className="pnav-right">
-        <Link to="/compare" className="pnav-link pnav-hide-mobile">Compare</Link>
-        <Link to="/pricing" className="pnav-link pnav-hide-mobile">Pricing</Link>
-        <Link to="/install" className="pnav-link pnav-hide-mobile">Install</Link>
-        <a
-          href="https://github.com/gbudjeakp/run-right"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="pnav-link pnav-hide-mobile pnav-github"
-          aria-label="GitHub repository"
-        >
+      <div className="flex items-center gap-3 sm:gap-5">
+        <Link to="/compare" className={`${linkCls} hidden sm:block`}>Compare</Link>
+        <Link to="/pricing" className={`${linkCls} hidden sm:block`}>Pricing</Link>
+        <Link to="/install" className={`${linkCls} hidden sm:block`}>Install</Link>
+        <a href="https://github.com/gbudjeakp/run-right" target="_blank" rel="noopener noreferrer"
+          className={`${linkCls} hidden sm:inline-flex items-center`} aria-label="GitHub repository">
           <GitHubIcon />
         </a>
-
         {onSignIn ? (
-          <button className="pnav-signin" onClick={onSignIn}>Sign In</button>
+          <button onClick={onSignIn}
+            className="font-deco text-[13px] tracking-[1.5px] bg-[var(--text)] text-[var(--cream)] border-none px-4 py-2 cursor-pointer hover:bg-red transition-colors">
+            Sign In
+          </button>
         ) : (
-          <Link to="/login" className="pnav-signin">Sign In</Link>
+          <Link to="/login"
+            className="font-deco text-[13px] tracking-[1.5px] bg-[var(--text)] text-[var(--cream)] no-underline px-4 py-2 hover:bg-red transition-colors inline-block">
+            Sign In
+          </Link>
         )}
-
-        <button
-          className="pnav-theme"
-          onClick={onToggleDark}
-          aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
+        <button onClick={onToggleDark} aria-label={dark ? 'Light mode' : 'Dark mode'}
+          className="p-1.5 text-[var(--text-mid)] hover:text-[var(--text)] bg-transparent border-none cursor-pointer transition-colors">
           {dark ? <SunIcon /> : <MoonIcon />}
         </button>
       </div>

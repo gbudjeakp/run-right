@@ -107,3 +107,47 @@ func TestRecommend_TierOrdering(t *testing.T) {
 		}
 	}
 }
+
+func TestRecommend_DoesNotGuessSpotValuesWithoutCatalogData(t *testing.T) {
+	machines := []types.MachineType{
+		{
+			ID:                   "m5.large",
+			Provider:             types.ProviderAWS,
+			Family:               "general-purpose",
+			Series:               "m5",
+			VCPUs:                2,
+			MemoryGiB:            8,
+			OnDemandPricePerHour: 0.096,
+			// Intentionally no spot_price_per_hour / spot_interruption_rate_pct / spot_risk.
+		},
+	}
+
+	summary := types.MetricsSummary{
+		JobID:         "no-spot-data",
+		CPUPercentP95: 45,
+		MemUsedGiBP95: 2,
+		SampleCount:   8,
+		DetectedMachine: &types.MachineType{
+			ID:                   "m5.large",
+			Provider:             types.ProviderAWS,
+			VCPUs:                2,
+			MemoryGiB:            8,
+			OnDemandPricePerHour: 0.096,
+		},
+	}
+
+	recs := Recommend(summary, machines)
+	if len(recs) == 0 {
+		t.Fatal("expected recommendation")
+	}
+
+	if recs[0].SpotMonthly != 0 {
+		t.Fatalf("expected spot monthly to be 0 when no spot data exists, got %.4f", recs[0].SpotMonthly)
+	}
+	if recs[0].SpotDeltaPercent != 0 {
+		t.Fatalf("expected spot delta to be 0 when no spot data exists, got %.4f", recs[0].SpotDeltaPercent)
+	}
+	if recs[0].SpotRisk != "" {
+		t.Fatalf("expected empty spot risk when no spot data exists, got %q", recs[0].SpotRisk)
+	}
+}

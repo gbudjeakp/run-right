@@ -30,7 +30,7 @@ the right AWS or GCP machine type so you stop guessing and start saving.`,
 }
 
 func main() {
-	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd)
+	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd, verifyCmd)
 	cobra.OnInitialize(initConfig)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -65,33 +65,40 @@ Examples:
 var (
 	monitorDuration  time.Duration
 	monitorInterval  time.Duration
+	monitorExpensiveSampleEvery int
 	monitorExport    string
 	monitorOutputDir string
 	monitorJobID     string
 	monitorPromPort  int
 	monitorHTTPURL   string
 	monitorSlackURL  string
+	monitorTeamsURL  string
 	monitorDryRun    bool
 )
 
 func init() {
 	monitorCmd.Flags().DurationVar(&monitorDuration, "duration", 0, "Stop after this duration (0 = run until SIGTERM/SIGINT)")
 	monitorCmd.Flags().DurationVar(&monitorInterval, "interval", 5*time.Second, "Sampling interval")
-	monitorCmd.Flags().StringVar(&monitorExport, "export", "file", "Comma-separated export backends: file,otlp,prometheus,http,slack")
+	monitorCmd.Flags().IntVar(&monitorExpensiveSampleEvery, "expensive-sample-every", 6, "Run expensive host probes (process/thread + disk/net) every N ticks")
+	monitorCmd.Flags().StringVar(&monitorExport, "export", "file", "Comma-separated export backends: file,otlp,prometheus,http,slack,teams")
 	monitorCmd.Flags().StringVar(&monitorOutputDir, "output-dir", ".", "Directory for file-based output")
 	monitorCmd.Flags().StringVar(&monitorJobID, "job-id", "", "Job identifier (defaults to a timestamp-based ID)")
 	monitorCmd.Flags().IntVar(&monitorPromPort, "prometheus-port", 9090, "Port for Prometheus /metrics endpoint")
 	monitorCmd.Flags().StringVar(&monitorHTTPURL, "http-url", "", "Base URL of runright backend for http export")
 	monitorCmd.Flags().StringVar(&monitorSlackURL, "slack-webhook", "", "Slack incoming webhook URL for slack export (or set RUNRIGHT_SLACK_WEBHOOK)")
+	monitorCmd.Flags().StringVar(&monitorTeamsURL, "teams-webhook", "", "Microsoft Teams incoming webhook URL for teams export (or set RUNRIGHT_TEAMS_WEBHOOK)")
 	monitorCmd.Flags().BoolVar(&monitorDryRun, "dry-run", false, "Print recommendation and exit non-zero if machine is not right-sized")
 }
 
 func runMonitor(_ *cobra.Command, _ []string) error {
 	backends := exporter.ParseBackends(monitorExport)
 
-	// Allow slack webhook via env var as fallback.
+	// Allow slack/teams webhook via env var as fallback.
 	if monitorSlackURL == "" {
 		monitorSlackURL = os.Getenv("RUNRIGHT_SLACK_WEBHOOK")
+	}
+	if monitorTeamsURL == "" {
+		monitorTeamsURL = os.Getenv("RUNRIGHT_TEAMS_WEBHOOK")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -108,7 +115,7 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 		cancel()
 	}()
 
-	mgr, err := exporter.New(ctx, backends, monitorPromPort, monitorHTTPURL, monitorSlackURL)
+	mgr, err := exporter.New(ctx, backends, monitorPromPort, monitorHTTPURL, monitorSlackURL, monitorTeamsURL)
 	if err != nil {
 		return fmt.Errorf("exporter: %w", err)
 	}
@@ -116,6 +123,7 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 
 	col := agent.NewCollector(agent.Config{
 		Interval:          monitorInterval,
+		ExpensiveSampleEvery: monitorExpensiveSampleEvery,
 		OutputDir:         monitorOutputDir,
 		JobID:             monitorJobID,
 		HeartbeatFilePath: filepath.Join(monitorOutputDir, "metrics-heartbeat.json"),
@@ -223,13 +231,38 @@ func printMarkdown(recs []types.Recommendation, s types.MetricsSummary) {
 	fmt.Printf("## RunRight Recommendations\n\n")
 	fmt.Printf("**Job:** `%s` | **CPU p95:** %.1f%% | **Mem p95:** %.2f GiB | **Duration:** %.0fs\n\n",
 		s.JobID, s.CPUPercentP95, s.MemUsedGiBP95, s.DurationSeconds)
-	fmt.Printf("| Tier | Machine | Provider | vCPUs | Memory | $/hr | $/month | Delta |\n")
-	fmt.Printf("|------|---------|----------|-------|--------|------|---------|-------|\n")
+	fmt.Printf("| Tier | Machine | Provider | vCPUs | Memory | $/hr | $/month | $/year | Delta | Spot Risk |\n")
+	fmt.Printf("|------|---------|----------|-------|--------|------|---------|--------|-------|-----------|\n")
 	for _, r := range recs {
-		fmt.Printf("| %s | `%s` | %s | %d | %.1f GiB | $%.4f | $%.2f | %+.1f%% |\n",
+		annualCost := r.EstimatedMonthly * 12
+		spotRisk := r.SpotRisk
+		if spotRisk == "" {
+			spotRisk = "—"
+		}
+		fmt.Printf("| %s | `%s` | %s | %d | %.1f GiB | $%.4f | $%.2f | $%.0f | %+.1f%% | %s |\n",
 			r.Tier, r.Machine.ID, r.Machine.Provider,
 			r.Machine.VCPUs, r.Machine.MemoryGiB,
-			r.Machine.OnDemandPricePerHour, r.EstimatedMonthly, r.CostDeltaPercent)
+			r.Machine.OnDemandPricePerHour, r.EstimatedMonthly, annualCost, r.CostDeltaPercent, spotRisk)
+	}
+
+	// Annual savings projection for the top cheaper recommendation.
+	for _, r := range recs {
+		if r.CostDeltaPercent < -0.5 && r.CurrentMonthly > 0 {
+			annualSaving := (r.CurrentMonthly - r.EstimatedMonthly) * 12
+			if annualSaving > 0 {
+				fmt.Printf("\n> Switching to `%s` could save **~$%.0f/year** ($%.2f/month).\n",
+					r.Machine.ID, annualSaving, r.CurrentMonthly-r.EstimatedMonthly)
+			}
+			break
+		}
+	}
+
+	// Duration risk notes.
+	for _, r := range recs {
+		if r.DurationRiskNote != "" {
+			fmt.Printf("\n> WARNING: **Duration risk** (`%s`): %s\n", r.Machine.ID, r.DurationRiskNote)
+			break
+		}
 	}
 }
 
@@ -300,4 +333,96 @@ func runServe(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("server init: %w", err)
 	}
 	return srv.Run(servePort)
+}
+
+// ── verify ────────────────────────────────────────────────────────────────────
+
+var verifyCmd = &cobra.Command{
+	Use:   "verify",
+	Short: "Compare a previous recommendation against actual job metrics",
+	Long: `verify loads a recommendation JSON (produced by a prior run) and a new
+metrics-summary.json from a job that ran on the recommended machine. It checks
+whether the recommendation was accurate and reports a pass/fail result.
+
+Examples:
+  runright verify --previous-recommendation recs.json --actual-metrics metrics-summary.json`,
+	RunE: runVerify,
+}
+
+var (
+	verifyPreviousRec string
+	verifyActualMetrics string
+)
+
+func init() {
+	verifyCmd.Flags().StringVar(&verifyPreviousRec, "previous-recommendation", "", "Path to recommendations JSON from a prior run (required)")
+	verifyCmd.Flags().StringVar(&verifyActualMetrics, "actual-metrics", "", "Path to metrics-summary.json from the run on the recommended machine (required)")
+	_ = verifyCmd.MarkFlagRequired("previous-recommendation")
+	_ = verifyCmd.MarkFlagRequired("actual-metrics")
+}
+
+func runVerify(_ *cobra.Command, _ []string) error {
+	recData, err := os.ReadFile(verifyPreviousRec)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", verifyPreviousRec, err)
+	}
+	var recs []types.Recommendation
+	if err := json.Unmarshal(recData, &recs); err != nil {
+		return fmt.Errorf("parsing recommendations: %w", err)
+	}
+	if len(recs) == 0 {
+		return fmt.Errorf("no recommendations found in %s", verifyPreviousRec)
+	}
+
+	metricData, err := os.ReadFile(verifyActualMetrics)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", verifyActualMetrics, err)
+	}
+	var actual types.MetricsSummary
+	if err := json.Unmarshal(metricData, &actual); err != nil {
+		return fmt.Errorf("parsing metrics summary: %w", err)
+	}
+
+	top := recs[0]
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Printf("\nRunRight Verify — was the recommendation accurate?\n")
+	fmt.Printf("Recommended machine: %s (%d vCPUs, %.1f GiB)\n\n",
+		top.Machine.ID, top.Machine.VCPUs, top.Machine.MemoryGiB)
+
+	cpuOK  := actual.CPUPercentP95 <= float64(top.Machine.VCPUs)/float64(top.RequiredVCPUs)*float64(top.RequiredVCPUs)
+	memOK  := actual.MemUsedGiBP95 <= top.Machine.MemoryGiB
+
+	// Headroom checks: p95 usage should be within the recommended machine's capacity.
+	cpuFit  := actual.CPUPercentP95 <= 80.0
+	memFit  := actual.MemUsedGiBP95 <= top.Machine.MemoryGiB*0.85
+
+	fmt.Fprintln(w, "CHECK\tRESULT\tACTUAL\tRECOMMENDED")
+	fmt.Fprintln(w, "-----\t------\t------\t-----------")
+
+	cpuResult := "PASS"
+	if !cpuFit {
+		cpuResult = "FAIL - machine is CPU-saturated, consider larger"
+	} else if !cpuOK {
+		cpuResult = "WARN"
+	}
+	fmt.Fprintf(w, "CPU p95\t%s\t%.1f%%\t%.1f%% headroom target\n",
+		cpuResult, actual.CPUPercentP95, 80.0)
+
+	memResult := "PASS"
+	if !memFit {
+		memResult = "FAIL - machine is memory-saturated, consider larger"
+	} else if !memOK {
+		memResult = "WARN"
+	}
+	fmt.Fprintf(w, "Memory p95\t%s\t%.2f GiB\t%.1f GiB available\n",
+		memResult, actual.MemUsedGiBP95, top.Machine.MemoryGiB)
+
+	_ = w.Flush()
+
+	if !cpuFit || !memFit {
+		fmt.Fprintf(os.Stderr, "\nrunright verify: recommendation was too aggressive — the machine was saturated.\n")
+		os.Exit(2)
+	}
+	fmt.Println("\nrunright verify: recommendation validated")
+	return nil
 }

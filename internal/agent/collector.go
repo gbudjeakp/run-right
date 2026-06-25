@@ -27,6 +27,9 @@ import (
 // Config controls how the collector behaves.
 type Config struct {
 	Interval          time.Duration
+	// ExpensiveSampleEvery controls how often expensive host-wide probes run.
+	// 1 = every tick, 6 = every 6 ticks (default, ~30s at 5s interval).
+	ExpensiveSampleEvery int
 	HeartbeatInterval time.Duration // how often to send partial data; 0 = 30s when FlushFn or HeartbeatFilePath is set
 	OutputDir         string
 	JobID             string
@@ -56,13 +59,17 @@ type Collector struct {
 	// baseline net/disk counters captured at first tick
 	baseNetIO  []net.IOCountersStat
 	baseDiskIO map[string]disk.IOCountersStat
-	prevTime   time.Time
+	prevIOTime time.Time
+	tickCount  int
 }
 
 // NewCollector creates a ready-to-run Collector.
 func NewCollector(cfg Config) *Collector {
 	if cfg.Interval <= 0 {
 		cfg.Interval = 5 * time.Second
+	}
+	if cfg.ExpensiveSampleEvery <= 0 {
+		cfg.ExpensiveSampleEvery = 6
 	}
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = "."
@@ -89,7 +96,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	diskIO, _ := disk.IOCounters()
 	c.baseNetIO = netIO
 	c.baseDiskIO = diskIO
-	c.prevTime = c.startTime
+	c.prevIOTime = c.startTime
 
 	// Heartbeat: periodically send partial data so the backend has a record even
 	// if the agent is killed (OOM, runner disconnect) before the final Flush.
@@ -164,6 +171,8 @@ func (c *Collector) sendHeartbeat() {
 
 func (c *Collector) collect(t time.Time) (types.MetricSnapshot, error) {
 	snap := types.MetricSnapshot{Timestamp: t}
+	c.tickCount++
+	runExpensive := c.tickCount == 1 || c.tickCount%c.cfg.ExpensiveSampleEvery == 0
 
 	// CPU
 	pcts, err := cpu.Percent(0, false)
@@ -178,41 +187,46 @@ func (c *Collector) collect(t time.Time) (types.MetricSnapshot, error) {
 		snap.MemTotalGiB = float64(vm.Total) / (1 << 30)
 	}
 
-	// Processes + threads
-	procs, err := process.Processes()
-	if err == nil {
-		snap.ProcessCount = len(procs)
-		for _, p := range procs {
-			threads, _ := p.NumThreads()
-			snap.ThreadCount += int(threads)
-		}
-	}
-
-	// Network I/O (delta since last tick)
-	elapsed := t.Sub(c.prevTime).Seconds()
-	netIO, err := net.IOCounters(false)
-	if err == nil && len(netIO) > 0 && len(c.baseNetIO) > 0 {
-		snap.NetRxMBs = float64(netIO[0].BytesRecv-c.baseNetIO[0].BytesRecv) / (1 << 20) / elapsed
-		snap.NetTxMBs = float64(netIO[0].BytesSent-c.baseNetIO[0].BytesSent) / (1 << 20) / elapsed
-		c.baseNetIO = netIO
-	}
-
-	// Disk I/O (delta since last tick)
-	diskIO, err := disk.IOCounters()
-	if err == nil && c.baseDiskIO != nil {
-		var readBytes, writeBytes uint64
-		for name, stat := range diskIO {
-			if base, ok := c.baseDiskIO[name]; ok {
-				readBytes += stat.ReadBytes - base.ReadBytes
-				writeBytes += stat.WriteBytes - base.WriteBytes
+	if runExpensive {
+		// Processes + threads are expensive on large runners; sample less frequently.
+		procs, err := process.Processes()
+		if err == nil {
+			snap.ProcessCount = len(procs)
+			for _, p := range procs {
+				threads, _ := p.NumThreads()
+				snap.ThreadCount += int(threads)
 			}
 		}
-		snap.DiskReadMBs = float64(readBytes) / (1 << 20) / elapsed
-		snap.DiskWriteMBs = float64(writeBytes) / (1 << 20) / elapsed
-		c.baseDiskIO = diskIO
+
+		// Network I/O (delta since previous expensive sample)
+		elapsed := t.Sub(c.prevIOTime).Seconds()
+		if elapsed <= 0 {
+			elapsed = c.cfg.Interval.Seconds()
+		}
+		netIO, err := net.IOCounters(false)
+		if err == nil && len(netIO) > 0 && len(c.baseNetIO) > 0 {
+			snap.NetRxMBs = float64(netIO[0].BytesRecv-c.baseNetIO[0].BytesRecv) / (1 << 20) / elapsed
+			snap.NetTxMBs = float64(netIO[0].BytesSent-c.baseNetIO[0].BytesSent) / (1 << 20) / elapsed
+			c.baseNetIO = netIO
+		}
+
+		// Disk I/O (delta since previous expensive sample)
+		diskIO, err := disk.IOCounters()
+		if err == nil && c.baseDiskIO != nil {
+			var readBytes, writeBytes uint64
+			for name, stat := range diskIO {
+				if base, ok := c.baseDiskIO[name]; ok {
+					readBytes += stat.ReadBytes - base.ReadBytes
+					writeBytes += stat.WriteBytes - base.WriteBytes
+				}
+			}
+			snap.DiskReadMBs = float64(readBytes) / (1 << 20) / elapsed
+			snap.DiskWriteMBs = float64(writeBytes) / (1 << 20) / elapsed
+			c.baseDiskIO = diskIO
+		}
+		c.prevIOTime = t
 	}
 
-	c.prevTime = t
 	return snap, nil
 }
 

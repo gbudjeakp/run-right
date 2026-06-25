@@ -1,0 +1,92 @@
+# RunRight for Azure Pipelines
+#
+# Add this template to your azure-pipelines.yml or include it as a template.
+# RunRight detects the Azure Pipelines platform automatically via the
+# TF_BUILD and AGENT_* env vars exposed by every Azure DevOps agent.
+#
+# Requirements:
+#   - An ubuntu-* or self-hosted Linux agent
+#   - curl available (standard on Ubuntu-hosted agents)
+#
+# Optional: set RUNRIGHT_HTTP_URL as a pipeline or library variable to push
+# metrics to your self-hosted RunRight backend.
+
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  RUNRIGHT_OUTPUT_DIR: $(Build.ArtifactStagingDirectory)/.runright
+  RUNRIGHT_INTERVAL: 5s
+  RUNRIGHT_EXPORT: file
+  # RUNRIGHT_HTTP_URL: https://your-runright-backend.example.com
+  # RUNRIGHT_SLACK_WEBHOOK: $(SLACK_WEBHOOK)   # set as secret variable
+  # RUNRIGHT_TEAMS_WEBHOOK: $(TEAMS_WEBHOOK)   # set as secret variable
+
+steps:
+  # ── Install RunRight ───────────────────────────────────────────────────────
+  - bash: |
+      ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+      curl -fsSL \
+        "https://github.com/gbudjeakp/run-right/releases/latest/download/runright_linux_${ARCH}.tar.gz" \
+        | tar -xz
+      sudo mv runright /usr/local/bin/runright
+      echo "RunRight installed: $(runright --version 2>&1 || true)"
+    displayName: Install RunRight
+
+  # ── Start monitor ──────────────────────────────────────────────────────────
+  - bash: |
+      mkdir -p "$(RUNRIGHT_OUTPUT_DIR)"
+      runright monitor \
+        --interval  "$(RUNRIGHT_INTERVAL)" \
+        --export    "$(RUNRIGHT_EXPORT)" \
+        --output-dir "$(RUNRIGHT_OUTPUT_DIR)" \
+        --job-id    "$(System.JobDisplayName)" \
+        --http-url  "$(RUNRIGHT_HTTP_URL)" \
+        --slack-webhook "$(RUNRIGHT_SLACK_WEBHOOK)" \
+        --teams-webhook "$(RUNRIGHT_TEAMS_WEBHOOK)" &
+      echo $! > /tmp/runright-monitor.pid
+      echo "RunRight monitor started (PID $(cat /tmp/runright-monitor.pid))"
+    displayName: Start RunRight monitor
+    env:
+      RUNRIGHT_SLACK_WEBHOOK: $(RUNRIGHT_SLACK_WEBHOOK)
+      RUNRIGHT_TEAMS_WEBHOOK: $(RUNRIGHT_TEAMS_WEBHOOK)
+
+  # ── Your build / test steps ────────────────────────────────────────────────
+  - bash: |
+      echo "Your build commands here"
+      # make build
+      # dotnet build
+      # mvn package
+    displayName: Build
+
+  # ── Stop monitor and recommend ─────────────────────────────────────────────
+  - bash: |
+      if [ -f /tmp/runright-monitor.pid ]; then
+        kill -TERM "$(cat /tmp/runright-monitor.pid)" 2>/dev/null || true
+        for i in $(seq 1 40); do
+          kill -0 "$(cat /tmp/runright-monitor.pid)" 2>/dev/null || break
+          sleep 0.25
+        done
+        rm -f /tmp/runright-monitor.pid
+      fi
+
+      SUMMARY="$(RUNRIGHT_OUTPUT_DIR)/metrics-summary.json"
+      if [ -f "$SUMMARY" ]; then
+        echo "=== RunRight Recommendations ==="
+        runright recommend --metrics "$SUMMARY" --format table || true
+      else
+        echo "RunRight: no metrics file found, skipping recommendations."
+      fi
+    displayName: Stop monitor & generate recommendations
+    condition: always()
+
+  # ── Publish metrics artifact ───────────────────────────────────────────────
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathToPublish: $(RUNRIGHT_OUTPUT_DIR)
+      artifactName: runright-metrics
+    displayName: Upload RunRight metrics
+    condition: always()

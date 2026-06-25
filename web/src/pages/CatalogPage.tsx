@@ -2,8 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import { fetchCatalog } from '../api'
 import type { MachineType } from '../types'
 import { useDebounce } from '../hooks/useDebounce'
+import { formatFromUSD, useCurrencyPreference } from '../currency'
 
 export default function CatalogPage() {
+  const { currency } = useCurrencyPreference()
   const [machines, setMachines] = useState<MachineType[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,59 +61,81 @@ export default function CatalogPage() {
 
   return (
     <div className="fadein">
-      <h1>Machine Catalog</h1>
-      <div className="filter-bar">
+      <h1 className="font-serif text-2xl sm:text-3xl font-black text-[var(--text)] mb-7 tracking-tight">Machine Catalog</h1>
+      <div className="flex flex-wrap gap-2 mb-5 items-center">
         <input
+          className="rr-input !w-auto min-w-[200px] flex-1 sm:flex-none sm:w-[260px]"
           placeholder="Search by ID, family, series…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ minWidth: 240 }}
         />
-        <select value={provider} onChange={(e) => { setProvider(e.target.value); setLoading(true) }}>
+        <select className="rr-select flex-1 sm:flex-none" value={provider} onChange={(e) => { setProvider(e.target.value); setLoading(true) }}>
           <option value="">All providers</option>
           <option value="aws">AWS</option>
           <option value="gcp">GCP</option>
           <option value="github">GitHub</option>
         </select>
-        <select value={arch} onChange={(e) => setArch(e.target.value)}>
+        <select className="rr-select flex-1 sm:flex-none" value={arch} onChange={(e) => setArch(e.target.value)}>
           <option value="">All architectures</option>
           <option value="x86_64">x86_64</option>
           <option value="arm64">arm64</option>
         </select>
-        <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 14, letterSpacing: 2, color: '#9A7B5A', alignSelf: 'center' }}>
+        <span className="font-deco text-[14px] tracking-[2px] text-[var(--text-light)] self-center ml-auto">
           {filtered.length} machines
         </span>
       </div>
-      <div className="card">
+      <div className="sm:hidden grid gap-3 mb-4">
+        {paginated.map((m) => (
+          <div key={`${m.provider}-${m.id}`} className="bg-paper border border-[var(--border)] rounded-lg px-4 py-3 shadow-rr">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <div className="font-mono text-[13px] text-[var(--text)] break-all">{m.id}</div>
+                <div className="text-xs text-[var(--text-light)] mt-1">{m.provider.toUpperCase()} · {m.architecture}</div>
+              </div>
+              <span className={`badge badge-${m.provider}`}>{m.provider.toUpperCase()}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-[var(--text-mid)]">
+              <div><span className="text-[var(--text-light)]">vCPUs</span><div>{m.vcpus}</div></div>
+              <div><span className="text-[var(--text-light)]">Memory</span><div>{m.memory_gib} GiB</div></div>
+              <div><span className="text-[var(--text-light)]">/hr</span><div>{formatFromUSD(m.on_demand_price_per_hour, currency, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</div></div>
+              <div><span className="text-[var(--text-light)]">/mo</span><div>{formatFromUSD(m.on_demand_price_per_hour * 720, currency)}</div></div>
+              <div className="col-span-2"><span className="text-[var(--text-light)]">Family</span><div>{m.family}</div></div>
+              <div className="col-span-2"><span className="text-[var(--text-light)]">Tags</span><div className="break-all">{m.tags?.join(', ')}</div></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rr-card !p-0 hidden sm:block">
         <div className="table-wrap">
-          <table>
+          <table className="rr-table">
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('id')}>ID <SortIndicator col="id" /></th>
+                <th className="cursor-pointer" onClick={() => toggleSort('id')}>ID <SortIndicator col="id" /></th>
                 <th>Provider</th>
-                <th>Family</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('vcpus')}>vCPUs <SortIndicator col="vcpus" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('memory_gib')}>Memory <SortIndicator col="memory_gib" /></th>
-                <th>Network</th>
-                <th>Arch</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('on_demand_price_per_hour')}>$/hr <SortIndicator col="on_demand_price_per_hour" /></th>
-                <th>$/month</th>
-                <th>Tags</th>
+                <th className="hidden md:table-cell">Family</th>
+                <th className="cursor-pointer" onClick={() => toggleSort('vcpus')}>vCPUs <SortIndicator col="vcpus" /></th>
+                <th className="cursor-pointer" onClick={() => toggleSort('memory_gib')}>Memory <SortIndicator col="memory_gib" /></th>
+                <th className="hidden lg:table-cell">Network</th>
+                <th className="hidden sm:table-cell">Arch</th>
+                <th className="cursor-pointer" onClick={() => toggleSort('on_demand_price_per_hour')}>Price/hr <SortIndicator col="on_demand_price_per_hour" /></th>
+                <th className="hidden sm:table-cell">Price/month</th>
+                <th className="hidden xl:table-cell">Tags</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map((m) => (
                 <tr key={`${m.provider}-${m.id}`}>
-                  <td><code>{m.id}</code></td>
+                  <td><code className="text-[13px] font-mono">{m.id}</code></td>
                   <td><span className={`badge badge-${m.provider}`}>{m.provider.toUpperCase()}</span></td>
-                  <td>{m.family}</td>
+                  <td className="hidden md:table-cell">{m.family}</td>
                   <td>{m.vcpus}</td>
                   <td>{m.memory_gib} GiB</td>
-                  <td>{m.network_gbps > 0 ? `${m.network_gbps} Gbps` : null}</td>
-                  <td>{m.architecture}</td>
-                  <td>${m.on_demand_price_per_hour.toFixed(4)}</td>
-                  <td>${(m.on_demand_price_per_hour * 720).toFixed(2)}</td>
-                  <td style={{ fontSize: 11, color: '#718096' }}>{m.tags?.join(', ')}</td>
+                  <td className="hidden lg:table-cell">{m.network_gbps > 0 ? `${m.network_gbps} Gbps` : null}</td>
+                  <td className="hidden sm:table-cell">{m.architecture}</td>
+                  <td>{formatFromUSD(m.on_demand_price_per_hour, currency, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
+                  <td className="hidden sm:table-cell">{formatFromUSD(m.on_demand_price_per_hour * 720, currency)}</td>
+                  <td className="hidden xl:table-cell text-[11px] text-[var(--text-light)]">{m.tags?.join(', ')}</td>
                 </tr>
               ))}
             </tbody>
@@ -120,30 +144,22 @@ export default function CatalogPage() {
       </div>
 
       {totalPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 12, letterSpacing: 1.5, color: '#9A7B5A' }}>ROWS</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+          <div className="flex items-center gap-2">
+            <span className="font-deco text-[12px] tracking-[1.5px] text-[var(--text-light)]">ROWS</span>
             {CAT_PAGE_SIZES.map(s => (
-              <button key={s} onClick={() => setPageSize(s)} style={{
-                background:  pageSize === s ? '#2C1A0E' : 'transparent',
-                color:       pageSize === s ? '#FBF0DC' : '#9A7B5A',
-                border:      '1px solid',
-                borderColor: pageSize === s ? '#2C1A0E' : '#D4B896',
-                padding: '4px 10px',
-                fontFamily: "'Bebas Neue', Impact, sans-serif",
-                fontSize: 13, letterSpacing: 1, cursor: 'pointer', transition: 'all .1s',
-              }}>{s}</button>
+              <button key={s} onClick={() => setPageSize(s)} style={catPgBtn(false, pageSize === s)}>{s}</button>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 12, letterSpacing: 1, color: '#9A7B5A', marginRight: 8 }}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-deco text-[12px] tracking-[1px] text-[var(--text-light)] mr-2">
               {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}
             </span>
             <button onClick={() => setPage(1)} disabled={page === 1} style={catPgBtn(page === 1)}>«</button>
             <button onClick={() => setPage(p => p - 1)} disabled={page === 1} style={catPgBtn(page === 1)}>‹</button>
             {catPageNums(page, totalPages).map((p, i) =>
               p === null
-                ? <span key={`e-${i}`} style={{ color: '#9A7B5A', padding: '0 4px', fontFamily: "'Bebas Neue'" }}>…</span>
+                ? <span key={`e-${i}`} className="text-[var(--text-light)] px-1 font-deco">…</span>
                 : <button key={p} onClick={() => setPage(p)} style={catPgBtn(false, p === page)}>{p}</button>
             )}
             <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages} style={catPgBtn(page === totalPages)}>›</button>

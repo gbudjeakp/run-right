@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -37,6 +37,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 export default function JobGroupPage() {
   const { jobId }  = useParams<{ jobId: string }>()
   const navigate   = useNavigate()
+  const location   = useLocation() as { state?: { backTo?: string; backLabel?: string } }
   const [jobs, setJobs]       = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -64,7 +65,7 @@ export default function JobGroupPage() {
   )
 
   const [page, setPage]         = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => { setPage(1) }, [dateRange, pageSize])
 
@@ -85,6 +86,8 @@ export default function JobGroupPage() {
   const latest   = (runs[0] ?? allRuns[0])
   const detected = latest?.summary?.detected_machine
   const topRec   = latest?.recommendations?.[0]
+  const backTo   = location.state?.backTo ?? '/app'
+  const backLabel = location.state?.backLabel ?? 'Back'
 
   const totalPages = Math.max(1, Math.ceil(runs.length / pageSize))
   const paginated  = runs.slice((page - 1) * pageSize, page * pageSize)
@@ -92,19 +95,19 @@ export default function JobGroupPage() {
   return (
     <div className="fadein">
       {/* Breadcrumb header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <button
-          onClick={() => navigate('/app')}
+          onClick={() => navigate(backTo)}
           style={{
             background: 'none', border: 'none', color: '#9A7B5A', cursor: 'pointer',
-            fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, padding: 0,
+            fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, padding: 0, whiteSpace: 'nowrap',
           }}
         >
-          ← Jobs
+          {backLabel}
         </button>
-        <span style={{ color: '#D4B896' }}>/</span>
-        <h1 style={{ margin: 0 }}>{decodedId}</h1>
-        <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, color: '#9A7B5A' }}>
+        <span aria-hidden="true" style={{ color: '#D4B896' }}>/</span>
+        <h1 style={{ margin: 0, fontFamily: "var(--serif)", fontSize: 22, fontWeight: 900, color: "var(--text)", wordBreak: 'break-word' }}>{decodedId}</h1>
+        <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, color: '#9A7B5A', whiteSpace: 'nowrap' }}>
           {runs.length !== allRuns.length
             ? <>{runs.length} of {allRuns.length} runs</>  
             : <>{allRuns.length} {allRuns.length === 1 ? 'run' : 'runs'}</>}
@@ -224,9 +227,40 @@ export default function JobGroupPage() {
       })()}
 
       {/* Run history table */}
-      <div className="card">
+      <div className="sm:hidden space-y-3 mb-4">
+        {paginated.map((run, i) => {
+          const rec    = run.recommendations?.[0]
+          const delta  = rec?.cost_delta_percent ?? 0
+          const runNum = runs.length - ((page - 1) * pageSize + i)
+          return (
+            <button
+              key={run.id}
+              className="w-full text-left bg-paper border border-[var(--border)] rounded-lg px-4 py-3 shadow-rr"
+              onClick={() => navigate(`/app/jobs/${run.id}`)}
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <div className="font-deco text-[12px] tracking-[1px] text-[var(--text-light)]">RUN #{runNum}</div>
+                  <div className="font-mono text-[13px] text-[var(--text)] break-all mt-1">{run.summary?.detected_machine?.id}</div>
+                </div>
+                {rec ? <span className={`badge badge-${rec.tier}`}>{rec.tier}</span> : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-[var(--text-mid)]">
+                <div><span className="text-[var(--text-light)]">Savings</span><div className={deltaClass(delta)}>{formatDelta(delta)}</div></div>
+                <div><span className="text-[var(--text-light)]">Best Fit</span><div className="font-mono break-all">{rec?.machine.id}</div></div>
+                <div><span className="text-[var(--text-light)]">CPU</span><div>{run.summary?.cpu_percent_p95 != null ? `${run.summary.cpu_percent_p95.toFixed(1)}%` : '—'}</div></div>
+                <div><span className="text-[var(--text-light)]">Mem</span><div>{run.summary?.mem_used_gib_p95 != null ? `${run.summary.mem_used_gib_p95.toFixed(2)} GiB` : '—'}</div></div>
+                <div><span className="text-[var(--text-light)]">Duration</span><div>{run.duration_seconds != null ? `${run.duration_seconds.toFixed(0)}s` : '—'}</div></div>
+                <div><span className="text-[var(--text-light)]">Date</span><div>{new Date(run.created_at).toLocaleDateString()}</div></div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="card hidden sm:block">
         <div className="table-wrap">
-          <table>
+          <table className="rr-table">
             <thead>
               <tr>
                 <th style={{ width: 48 }}>#</th>
