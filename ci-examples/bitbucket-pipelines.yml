@@ -1,0 +1,93 @@
+# RunRight for Bitbucket Pipelines
+#
+# Merge this into your bitbucket-pipelines.yml.
+# RunRight detects the Bitbucket platform automatically via the BITBUCKET_BUILD_NUMBER env var.
+#
+# Requirements:
+#   - A Linux runner (Bitbucket Cloud default or self-hosted)
+#   - curl available in the pipeline image
+#
+# Optional: set RUNRIGHT_HTTP_URL as a repository or workspace variable to push
+# metrics to your self-hosted RunRight backend.
+
+image: ubuntu:24.04
+
+definitions:
+  # ── Reusable step scripts ──────────────────────────────────────────────────
+  scripts:
+    - script: &install-runright |
+        apt-get update -qq && apt-get install -y -qq curl
+        ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+        curl -fsSL "https://github.com/gbudjeakp/run-right/releases/latest/download/runright_linux_${ARCH}.tar.gz" | tar -xz
+        mv runright /usr/local/bin/runright
+
+    - script: &start-monitor |
+        mkdir -p "${RUNRIGHT_OUTPUT_DIR:-.runright}"
+        runright monitor \
+          --interval  "${RUNRIGHT_INTERVAL:-5s}" \
+          --export    "${RUNRIGHT_EXPORT:-file}" \
+          --output-dir "${RUNRIGHT_OUTPUT_DIR:-.runright}" \
+          --job-id    "${BITBUCKET_STEP_TRIGGERER_UUID:-${BITBUCKET_BUILD_NUMBER}}" \
+          --http-url  "${RUNRIGHT_HTTP_URL:-}" \
+          --slack-webhook "${RUNRIGHT_SLACK_WEBHOOK:-}" \
+          --teams-webhook "${RUNRIGHT_TEAMS_WEBHOOK:-}" &
+        echo $! > /tmp/runright-monitor.pid
+        echo "runright: monitor started (PID $(cat /tmp/runright-monitor.pid))"
+
+    - script: &stop-and-recommend |
+        if [ -f /tmp/runright-monitor.pid ]; then
+          kill -TERM "$(cat /tmp/runright-monitor.pid)" 2>/dev/null || true
+          for i in $(seq 1 40); do
+            kill -0 "$(cat /tmp/runright-monitor.pid)" 2>/dev/null || break
+            sleep 0.25
+          done
+          rm -f /tmp/runright-monitor.pid
+        fi
+        SUMMARY="${RUNRIGHT_OUTPUT_DIR:-.runright}/metrics-summary.json"
+        if [ -f "$SUMMARY" ]; then
+          echo "=== RunRight Recommendations ==="
+          runright recommend --metrics "$SUMMARY" --format table || true
+        else
+          echo "RunRight: no metrics file found."
+        fi
+
+pipelines:
+  default:
+    - step:
+        name: Build
+        script:
+          - *install-runright
+          - *start-monitor
+          # ── Your build commands ──
+          - echo "Your build commands here"
+          # - make build
+          # ── Stop monitor and get recommendations ──
+          - *stop-and-recommend
+        artifacts:
+          - .runright/**
+
+    - step:
+        name: Test
+        script:
+          - *install-runright
+          - *start-monitor
+          # ── Your test commands ──
+          - echo "Your test commands here"
+          # - make test
+          # ── Stop monitor and get recommendations ──
+          - *stop-and-recommend
+        artifacts:
+          - .runright/**
+
+  # ── Branch-specific example ──────────────────────────────────────────────
+  branches:
+    main:
+      - step:
+          name: Build & Test (monitored)
+          script:
+            - *install-runright
+            - *start-monitor
+            - make build test
+            - *stop-and-recommend
+          artifacts:
+            - .runright/**

@@ -115,6 +115,9 @@ func TestNewCollector_Defaults(t *testing.T) {
 	if c.cfg.Interval != 5*time.Second {
 		t.Errorf("default Interval: got %v, want 5s", c.cfg.Interval)
 	}
+	if c.cfg.ExpensiveSampleEvery != 6 {
+		t.Errorf("default ExpensiveSampleEvery: got %d, want 6", c.cfg.ExpensiveSampleEvery)
+	}
 	if c.cfg.OutputDir != "." {
 		t.Errorf("default OutputDir: got %q, want .", c.cfg.OutputDir)
 	}

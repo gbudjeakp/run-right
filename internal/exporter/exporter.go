@@ -33,6 +33,7 @@ const (
 	BackendPrometheus Backend = "prometheus"
 	BackendHTTP       Backend = "http"
 	BackendSlack      Backend = "slack"
+	BackendTeams      Backend = "teams"
 )
 
 // ParseBackends parses a comma-separated list of backend names.
@@ -41,7 +42,7 @@ func ParseBackends(s string) []Backend {
 	for _, part := range strings.Split(s, ",") {
 		part = strings.TrimSpace(strings.ToLower(part))
 		switch Backend(part) {
-		case BackendFile, BackendOTLP, BackendPrometheus, BackendHTTP, BackendSlack:
+		case BackendFile, BackendOTLP, BackendPrometheus, BackendHTTP, BackendSlack, BackendTeams:
 			out = append(out, Backend(part))
 		}
 	}
@@ -59,16 +60,18 @@ type Manager struct {
 	promPort     int
 	httpURL      string
 	slackWebhook string
+	teamsWebhook string
 	promLn       net.Listener
 }
 
 // New initialises the export manager. Call Shutdown when done.
-func New(ctx context.Context, backends []Backend, promPort int, httpURL string, slackWebhook string) (*Manager, error) {
+func New(ctx context.Context, backends []Backend, promPort int, httpURL string, slackWebhook string, teamsWebhook string) (*Manager, error) {
 	m := &Manager{
 		backends:     backends,
 		promPort:     promPort,
 		httpURL:      httpURL,
 		slackWebhook: slackWebhook,
+		teamsWebhook: teamsWebhook,
 	}
 
 	var readers []sdkmetric.Reader
@@ -161,6 +164,10 @@ func (m *Manager) PublishSummary(ctx context.Context, summary types.MetricsSumma
 			if err := m.postSlack(ctx, summary, recs); err != nil {
 				return err
 			}
+		case BackendTeams:
+			if err := m.postTeams(ctx, summary, recs); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -237,7 +244,7 @@ func (m *Manager) postSlack(ctx context.Context, summary types.MetricsSummary, r
 	monthlyDelta := best.CurrentMonthly - best.EstimatedMonthly
 
 	text := fmt.Sprintf(
-		":chart_with_downwards_trend: *RunRight — `%s`*\n"+
+		"RunRight savings report for `%s`\n"+
 			">*Current:* `%s`   *Recommended:* `%s`\n"+
 			">*Savings:* ~$%.2f/mo (%.0f%% cheaper)\n"+
 			">*Required:* %d vCPU · %.1f GiB RAM (p95 with headroom)",
@@ -274,6 +281,75 @@ func (m *Manager) postSlack(ctx context.Context, summary types.MetricsSummary, r
 	_ = resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("slack webhook returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// postTeams sends a concise recommendation card to a Microsoft Teams Incoming Webhook.
+// Only fires for completed summaries with at least one cheaper recommendation.
+func (m *Manager) postTeams(ctx context.Context, summary types.MetricsSummary, recs []types.Recommendation) error {
+	if m.teamsWebhook == "" {
+		return fmt.Errorf("--teams-webhook is required for the teams exporter")
+	}
+	if summary.Status != "completed" {
+		return nil
+	}
+
+	var best *types.Recommendation
+	for i := range recs {
+		if recs[i].CostDeltaPercent < 0 {
+			if best == nil || recs[i].CostDeltaPercent < best.CostDeltaPercent {
+				best = &recs[i]
+			}
+		}
+	}
+	if best == nil {
+		return nil
+	}
+
+	currentID := "unknown"
+	if summary.DetectedMachine != nil {
+		currentID = summary.DetectedMachine.ID
+	}
+	savingsPct := -best.CostDeltaPercent
+	monthlyDelta := best.CurrentMonthly - best.EstimatedMonthly
+
+	// Teams Incoming Webhook payload (simple MessageCard format — universally supported).
+	payload := map[string]interface{}{
+		"@type":      "MessageCard",
+		"@context":   "http://schema.org/extensions",
+		"themeColor": "0078D4",
+		"summary":    fmt.Sprintf("RunRight: %s can save ~$%.2f/mo", summary.JobID, monthlyDelta),
+		"sections": []map[string]interface{}{
+			{
+				"activityTitle":    fmt.Sprintf("RunRight - `%s`", summary.JobID),
+				"activitySubtitle": fmt.Sprintf("Current: **%s** to Recommended: **%s**", currentID, best.Machine.ID),
+				"facts": []map[string]string{
+					{"name": "Monthly saving", "value": fmt.Sprintf("~$%.2f (%.0f%% cheaper)", monthlyDelta, savingsPct)},
+					{"name": "Required", "value": fmt.Sprintf("%d vCPU · %.1f GiB RAM (p95 + headroom)", best.RequiredVCPUs, best.RequiredMemoryGiB)},
+					{"name": "Spot risk", "value": best.SpotRisk},
+				},
+				"markdown": true,
+			},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.teamsWebhook, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("teams webhook returned %d", resp.StatusCode)
 	}
 	return nil
 }

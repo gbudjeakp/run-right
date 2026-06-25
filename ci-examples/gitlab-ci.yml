@@ -1,0 +1,94 @@
+# RunRight for GitLab CI
+#
+# Add this snippet to your .gitlab-ci.yml.
+# RunRight detects the GitLab CI platform automatically via the CI_SERVER_URL
+# and GITLAB_CI env vars exposed by every GitLab runner.
+#
+# Requirements:
+#   - A Linux runner (shell or Docker executor)
+#   - curl available in the job image
+#
+# Optional: set RUNRIGHT_HTTP_URL as a CI/CD variable to push metrics to your
+# self-hosted RunRight backend.
+
+# ── Reusable helper scripts ──────────────────────────────────────────────────
+
+.runright_install: &runright_install |
+  RUNRIGHT_VERSION="${RUNRIGHT_VERSION:-latest}"
+  OS="linux"
+  ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+  if [ "$RUNRIGHT_VERSION" = "latest" ]; then
+    DOWNLOAD_URL="https://github.com/gbudjeakp/run-right/releases/latest/download/runright_${OS}_${ARCH}.tar.gz"
+  else
+    DOWNLOAD_URL="https://github.com/gbudjeakp/run-right/releases/download/${RUNRIGHT_VERSION}/runright_${OS}_${ARCH}.tar.gz"
+  fi
+  curl -fsSL "$DOWNLOAD_URL" | tar -xz
+  chmod +x runright
+  export PATH="$PWD:$PATH"
+
+.runright_start: &runright_start |
+  mkdir -p "${RUNRIGHT_OUTPUT_DIR:-.runright}"
+  runright monitor \
+    --interval  "${RUNRIGHT_INTERVAL:-5s}" \
+    --export    "${RUNRIGHT_EXPORT:-file}" \
+    --output-dir "${RUNRIGHT_OUTPUT_DIR:-.runright}" \
+    --job-id    "${CI_JOB_NAME}" \
+    --http-url  "${RUNRIGHT_HTTP_URL:-}" \
+    --slack-webhook "${RUNRIGHT_SLACK_WEBHOOK:-}" \
+    --teams-webhook "${RUNRIGHT_TEAMS_WEBHOOK:-}" &
+  echo $! > /tmp/runright-monitor.pid
+  echo "runright: monitor started (PID $(cat /tmp/runright-monitor.pid))"
+
+.runright_stop: &runright_stop |
+  if [ -f /tmp/runright-monitor.pid ]; then
+    kill -TERM "$(cat /tmp/runright-monitor.pid)" 2>/dev/null || true
+    for i in $(seq 1 40); do
+      kill -0 "$(cat /tmp/runright-monitor.pid)" 2>/dev/null || break
+      sleep 0.25
+    done
+    rm -f /tmp/runright-monitor.pid
+  fi
+
+.runright_recommend: &runright_recommend |
+  SUMMARY="${RUNRIGHT_OUTPUT_DIR:-.runright}/metrics-summary.json"
+  if [ -f "$SUMMARY" ]; then
+    echo "=== RunRight Recommendations ==="
+    runright recommend --metrics "$SUMMARY" --format table || true
+    runright recommend --metrics "$SUMMARY" --format json > "${RUNRIGHT_OUTPUT_DIR:-.runright}/recommendations.json" || true
+  fi
+
+# ── Example job using standalone mode ────────────────────────────────────────
+
+build:
+  stage: build
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl
+    - *runright_install
+    - *runright_start
+  script:
+    - echo "Your build commands here"
+    # - make build
+    # - npm ci && npm run build
+  after_script:
+    # after_script always runs, even on failure — good for cleanup.
+    - *runright_stop
+    - *runright_recommend
+  artifacts:
+    paths:
+      - .runright/
+    expire_in: 30 days
+    when: always
+
+# ── Minimal example (wrapper-style using before/after_script) ────────────────
+
+# test:
+#   stage: test
+#   before_script:
+#     - *runright_install
+#     - *runright_start
+#   script:
+#     - make test
+#   after_script:
+#     - *runright_stop
+#     - *runright_recommend

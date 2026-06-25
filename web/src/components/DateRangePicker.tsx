@@ -56,78 +56,51 @@ export function DateRangePicker({
     onChange({ ...value, [field]: val })
   }
 
-  const inputStyle: React.CSSProperties = {
-    background: '#FFFDF7',
-    border: '1px solid #D4B896',
-    borderBottom: '2px solid #B8946A',
-    color: '#2C1A0E',
-    fontFamily: 'Lato, sans-serif',
-    fontSize: 13,
-    padding: '6px 8px',
-    outline: 'none',
-    colorScheme: 'light' as React.CSSProperties['colorScheme'],
-    cursor: 'pointer',
-  }
-
   const hasCustom = !!(value.from || value.to)
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <span style={{
-        fontFamily: "'Bebas Neue', Impact, sans-serif",
-        fontSize: 12, letterSpacing: 1.5, color: '#9A7B5A',
-      }}>
+    <div className="date-range-picker">
+      <span className="date-range-label">
         PERIOD
       </span>
 
-      {PRESETS.map(p => {
-        const active = activePreset === p.key
-        return (
-          <button
-            key={p.key}
-            onClick={() => applyPreset(p.key, p.days)}
-            style={{
-              background:   active ? '#2C1A0E' : 'transparent',
-              color:        active ? '#FBF0DC' : '#9A7B5A',
-              border:       '1px solid',
-              borderColor:  active ? '#2C1A0E' : '#D4B896',
-              padding:      '4px 10px',
-              fontFamily:   "'Bebas Neue', Impact, sans-serif",
-              fontSize: 13, letterSpacing: 1, cursor: 'pointer',
-              transition:   'all .1s',
-            }}
-          >
-            {p.label}
-          </button>
-        )
-      })}
+      <div className="date-range-presets">
+        {PRESETS.map(p => {
+          const active = activePreset === p.key
+          return (
+            <button
+              key={p.key}
+              onClick={() => applyPreset(p.key, p.days)}
+              className={`date-range-preset ${active ? 'is-active' : ''}`}
+            >
+              {p.label}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Custom date inputs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
+      <div className="date-range-custom">
         <input
           type="date"
           value={value.from}
           onChange={e => handleInput('from', e.target.value)}
-          style={inputStyle}
+          className="rr-input date-range-input"
           title="From date"
         />
-        <span style={{ color: '#9A7B5A', fontSize: 14 }}>–</span>
+        <span className="date-range-sep">–</span>
         <input
           type="date"
           value={value.to}
           onChange={e => handleInput('to', e.target.value)}
-          style={inputStyle}
+          className="rr-input date-range-input"
           title="To date"
         />
         {hasCustom && activePreset === (null as unknown as Preset) && (
           <button
             onClick={() => applyPreset('all', null)}
             title="Clear custom range"
-            style={{
-              background: 'none', border: '1px solid #D4B896', color: '#9A7B5A',
-              padding: '4px 8px', fontFamily: "'Bebas Neue'", fontSize: 12, cursor: 'pointer',
-              lineHeight: 1,
-            }}
+            className="date-range-clear"
           >
             ✕
           </button>

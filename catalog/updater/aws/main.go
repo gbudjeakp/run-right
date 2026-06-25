@@ -74,7 +74,10 @@ func convertAWS(it ec2types.InstanceTypeInfo) *types.MachineType {
 	if it.VCpuInfo.DefaultVCpus != nil {
 		vcpus = int(*it.VCpuInfo.DefaultVCpus)
 	}
-	memGiB := float64(it.MemoryInfo.SizeInMiB) / 1024.0
+	if it.MemoryInfo.SizeInMiB == nil {
+		return nil
+	}
+	memGiB := float64(*it.MemoryInfo.SizeInMiB) / 1024.0
 
 	arch := "x86_64"
 	if len(it.ProcessorInfo.SupportedArchitectures) > 0 {

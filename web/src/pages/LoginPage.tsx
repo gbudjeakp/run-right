@@ -4,20 +4,20 @@ import LogoMark from '../components/LogoMark'
 
 interface Props {
   onLogin: () => void
-  onBack: () => void
 }
 
-export default function LoginPage({ onLogin, onBack }: Props) {
+export default function LoginPage({ onLogin }: Props) {
   const [key, setKey] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const allowEmptyInDev = import.meta.env.DEV
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await login(key)
+      await login(key || 'dev')
       onLogin()
     } catch {
       setError('Invalid API key. Please try again.')
@@ -27,118 +27,60 @@ export default function LoginPage({ onLogin, onBack }: Props) {
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      background: '#FBF0DC',
-      fontFamily: "'Lato', system-ui, sans-serif",
-    }}>
-      <div style={{ width: 400, position: 'relative' }}>
-
-        {/* Back link */}
-        <button
-          onClick={onBack}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: "'Bebas Neue', Impact, sans-serif",
-            fontSize: 13, letterSpacing: 2, color: '#9A7B5A',
-            marginBottom: 28, display: 'block', padding: 0,
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#C23B22')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#9A7B5A')}
-        >
-          ← BACK
-        </button>
+    <div className="flex items-center justify-center min-h-screen bg-[var(--cream)] px-4 py-8 font-sans">
+      <div className="w-full max-w-sm">
 
         {/* Card */}
-        <div style={{
-          background: '#FFFDF7',
-          border: '1px solid #D4B896',
-          boxShadow: '5px 5px 0 rgba(92,58,30,.15)',
-          padding: '40px 36px',
-        }}>
+        <div className="bg-paper border border-[var(--border)] shadow-[5px_5px_0_rgba(92,58,30,.15)] px-8 py-10 sm:px-10">
+
           {/* Logo */}
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div className="flex flex-col items-center mb-8">
             <LogoMark size={36} color="#2C1A0E" />
-            <div style={{
-              fontFamily: "'Bebas Neue', Impact, sans-serif",
-              fontSize: 22, letterSpacing: 4, color: '#2C1A0E', marginTop: 8,
-            }}>
-              RUNRIGHT
-            </div>
+            <div className="font-deco text-[22px] tracking-[4px] text-[var(--text)] mt-2">RUNRIGHT</div>
           </div>
 
-          {/* Rule */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-            <div style={{ flex: 1, height: 1, background: '#D4B896' }} />
-            <span style={{ fontFamily: "'Bebas Neue'", fontSize: 11, letterSpacing: 3, color: '#9A7B5A' }}>
-              SIGN IN
-            </span>
-            <div style={{ flex: 1, height: 1, background: '#D4B896' }} />
+          {/* Divider */}
+          <div className="flex items-center gap-3 mb-7">
+            <div className="flex-1 h-px bg-[var(--border)]" />
+            <span className="font-deco text-[11px] tracking-[3px] text-[var(--text-light)]">SIGN IN</span>
+            <div className="flex-1 h-px bg-[var(--border)]" />
           </div>
 
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{
-                display: 'block',
-                fontFamily: "'Bebas Neue', Impact, sans-serif",
-                fontSize: 12, letterSpacing: 1.5, color: '#6B4226',
-                marginBottom: 8, textTransform: 'uppercase',
-              }}>
+            <div className="mb-5">
+              <label className="block font-deco text-[12px] tracking-[1.5px] text-[var(--text-mid)] mb-2 uppercase">
                 API Key
               </label>
               <input
                 type="password"
+                className="rr-input !bg-cream"
                 placeholder="Enter your RUNRIGHT_API_KEY"
                 value={key}
                 onChange={e => setKey(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                style={{
-                  width: '100%',
-                  background: '#FBF0DC',
-                  border: '1px solid #D4B896',
-                  borderBottom: '2px solid #B8946A',
-                  color: '#2C1A0E',
-                  padding: '11px 14px',
-                  fontFamily: "'Lato', system-ui, sans-serif",
-                  fontSize: 14, outline: 'none',
-                }}
-                onFocus={e => { e.target.style.borderColor = '#B8860B'; e.target.style.boxShadow = '0 2px 0 #B8860B' }}
-                onBlur={e => { e.target.style.borderColor = '#D4B896'; e.target.style.borderBottomColor = '#B8946A'; e.target.style.boxShadow = 'none' }}
               />
             </div>
 
             {error && (
-              <p style={{ fontSize: 13, color: '#C23B22', marginBottom: 16, lineHeight: 1.5 }}>
-                {error}
-              </p>
+              <p className="text-[13px] text-red mb-4 leading-relaxed">{error}</p>
             )}
 
             <button
               type="submit"
-              disabled={loading || key === ''}
-              style={{
-                width: '100%',
-                background: key && !loading ? '#C23B22' : '#D4B896',
-                color: '#FFFDF7',
-                border: 'none',
-                padding: '13px',
-                fontFamily: "'Bebas Neue', Impact, sans-serif",
-                fontSize: 16, letterSpacing: 2, cursor: key === '' || loading ? 'not-allowed' : 'pointer',
-                boxShadow: key && !loading ? '3px 3px 0 rgba(92,58,30,.2)' : 'none',
-                transition: 'all .1s',
-              }}
-              onMouseEnter={e => { if (key && !loading) { (e.currentTarget).style.background = '#9B2D17'; (e.currentTarget).style.transform = 'translate(1px,1px)'; (e.currentTarget).style.boxShadow = '2px 2px 0 rgba(92,58,30,.2)' } }}
-              onMouseLeave={e => { (e.currentTarget).style.background = key && !loading ? '#C23B22' : '#D4B896'; (e.currentTarget).style.transform = 'none'; (e.currentTarget).style.boxShadow = key && !loading ? '3px 3px 0 rgba(92,58,30,.2)' : 'none' }}
+              disabled={loading || (!allowEmptyInDev && key === '')}
+              className={[
+                'w-full py-3 font-deco text-[16px] tracking-[2px] border-none cursor-pointer transition-all',
+                (allowEmptyInDev || key) && !loading
+                  ? 'bg-red text-cream shadow-rr hover:bg-red-dark hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_rgba(92,58,30,.2)]'
+                  : 'bg-[var(--border-dark)] text-[var(--cream-alt)] opacity-60 cursor-not-allowed',
+              ].join(' ')}
             >
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
 
-          <p style={{ fontSize: 12, color: '#9A7B5A', textAlign: 'center', marginTop: 20, lineHeight: 1.7 }}>
+          <p className="text-xs text-[var(--text-light)] text-center mt-5 leading-relaxed">
             Key exchanged once · HttpOnly cookie set<br />Never stored in browser
           </p>
         </div>

@@ -5,6 +5,7 @@ import {
   BarChart, Bar,
 } from 'recharts'
 import { fetchJob } from '../api'
+import { formatFromUSD, useCurrencyPreference } from '../currency'
 import type { Job, Recommendation } from '../types'
 
 function TierBadge({ tier }: { tier: string }) {
@@ -20,6 +21,7 @@ function DeltaCell({ pct }: { pct: number }) {
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { currency } = useCurrencyPreference()
   const [job, setJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,24 +61,24 @@ export default function JobDetailPage() {
 
   return (
     <div className="fadein">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <button
           onClick={() => navigate('/app')}
-          style={{ background: 'none', border: 'none', color: '#9A7B5A', cursor: 'pointer', fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, padding: 0 }}
+          style={{ background: 'none', border: 'none', color: '#9A7B5A', cursor: 'pointer', fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, padding: 0, whiteSpace: 'nowrap' }}
         >
-          ← Jobs
+          Jobs
         </button>
-        <span style={{ color: '#D4B896' }}>/</span>
+        <span aria-hidden="true" style={{ color: '#D4B896' }}>/</span>
         <Link
           to={`/app/jobs/group/${encodeURIComponent(job.job_id)}`}
-          style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, color: '#9A7B5A', textDecoration: 'none' }}
+          style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, color: '#9A7B5A', textDecoration: 'none', whiteSpace: 'nowrap' }}
         >
           {job.job_id}
         </Link>
-        <span style={{ color: '#D4B896' }}>/</span>
-        <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, color: '#2C1A0E' }}>Run #{job.id}</span>
+        <span aria-hidden="true" style={{ color: '#D4B896' }}>/</span>
+        <span style={{ fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: 13, letterSpacing: 1, color: '#2C1A0E', whiteSpace: 'nowrap' }}>Run #{job.id}</span>
       </div>
-      <h1>{job.job_id}</h1>
+      <h1 className="font-serif text-2xl sm:text-3xl font-black text-[var(--text)] mb-5 tracking-tight">{job.job_id}</h1>
 
       {/* Peak stat cards */}
       <div className="stats-row">
@@ -167,14 +169,22 @@ export default function JobDetailPage() {
       {/* Cost comparison */}
       {costData.length > 0 && (
         <div className="card">
-          <h2>Cost Comparison ($/month)</h2>
+          <h2>Cost Comparison (monthly)</h2>
           <div className="chart-wrap">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={costData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#D4B896" />
-                <XAxis type="number" stroke="#9A7B5A" unit="$" tick={{ fontFamily: "'Lato'", fontSize: 11 }} />
+                <XAxis
+                  type="number"
+                  stroke="#9A7B5A"
+                  tick={{ fontFamily: "'Lato'", fontSize: 11 }}
+                  tickFormatter={(value) => formatFromUSD(Number(value), currency, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                />
                 <YAxis type="category" dataKey="name" stroke="#9A7B5A" width={120} tick={{ fontSize: 11, fontFamily: 'monospace' }} />
-                <Tooltip contentStyle={{ background: '#FFFDF7', border: '1px solid #D4B896', fontFamily: 'Lato', color: '#2C1A0E' }} />
+                <Tooltip
+                  contentStyle={{ background: '#FFFDF7', border: '1px solid #D4B896', fontFamily: 'Lato', color: '#2C1A0E' }}
+                  formatter={(value) => formatFromUSD(Number(value ?? 0), currency)}
+                />
                 <Legend wrapperStyle={{ fontFamily: "'Lato'", fontSize: 13 }} />
                 <Bar dataKey="current" fill="#D4B896" name="Current" radius={[0, 3, 3, 0]} />
                 <Bar dataKey="monthly" fill="#B8860B" name="Recommended" radius={[0, 3, 3, 0]} />
@@ -193,11 +203,11 @@ export default function JobDetailPage() {
           <>
             {recs[0]?.duration_regression_pct != null && (
               <div style={{ background: '#FFF3CD', border: '1px solid #F5C842', borderRadius: 4, padding: '8px 14px', marginBottom: 12, fontFamily: 'Lato, sans-serif', fontSize: 13, color: '#7B5800' }}>
-                ⚠ Duration regression detected: this run was <strong>+{recs[0].duration_regression_pct.toFixed(1)}%</strong> slower than the rolling average.
+                Duration regression detected: this run was <strong>+{recs[0].duration_regression_pct.toFixed(1)}%</strong> slower than the rolling average.
               </div>
             )}
             <div className="table-wrap">
-              <table>
+              <table className="rr-table">
                 <thead>
                   <tr>
                     <th>Tier</th>
@@ -206,8 +216,8 @@ export default function JobDetailPage() {
                     <th>vCPUs</th>
                     <th>Memory</th>
                     <th>Arch</th>
-                    <th>$/hr</th>
-                    <th>$/month</th>
+                    <th>Price/hr</th>
+                    <th>Price/month</th>
                     <th title="Approximate spot/preemptible price">Spot/mo</th>
                     <th>Delta</th>
                   </tr>
@@ -221,10 +231,10 @@ export default function JobDetailPage() {
                       <td>{r.machine.vcpus}</td>
                       <td>{r.machine.memory_gib} GiB</td>
                       <td>{r.machine.architecture}</td>
-                      <td>${r.machine.on_demand_price_per_hour.toFixed(4)}</td>
-                      <td>${r.estimated_monthly_usd.toFixed(2)}</td>
+                      <td>{formatFromUSD(r.machine.on_demand_price_per_hour, currency, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
+                      <td>{formatFromUSD(r.estimated_monthly_usd, currency)}</td>
                       <td style={{ color: '#5A8A3A', fontFamily: 'monospace', fontSize: 13 }}>
-                        {(r.spot_monthly_usd ?? 0) > 0 ? `$${r.spot_monthly_usd!.toFixed(2)}` : '—'}
+                        {(r.spot_monthly_usd ?? 0) > 0 ? formatFromUSD(r.spot_monthly_usd ?? 0, currency) : '—'}
                       </td>
                       <td><DeltaCell pct={r.cost_delta_percent} /></td>
                     </tr>

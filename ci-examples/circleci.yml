@@ -1,0 +1,116 @@
+# RunRight for CircleCI
+#
+# Paste this into your .circleci/config.yml (or merge into your existing config).
+# RunRight detects the CircleCI platform automatically via the CIRCLECI env var.
+#
+# Requirements:
+#   - A Linux executor (machine or docker)
+#   - curl available in the executor
+#
+# Optional: set RUNRIGHT_HTTP_URL as a project or context env var to push metrics
+# to your self-hosted RunRight backend.
+
+version: 2.1
+
+# ── Reusable commands ────────────────────────────────────────────────────────
+
+commands:
+  runright-install:
+    description: "Download the RunRight binary for the current executor"
+    parameters:
+      version:
+        type: string
+        default: "latest"
+    steps:
+      - run:
+          name: Install RunRight
+          command: |
+            ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+            VERSION="<< parameters.version >>"
+            if [ "$VERSION" = "latest" ]; then
+              URL="https://github.com/gbudjeakp/run-right/releases/latest/download/runright_linux_${ARCH}.tar.gz"
+            else
+              URL="https://github.com/gbudjeakp/run-right/releases/download/${VERSION}/runright_linux_${ARCH}.tar.gz"
+            fi
+            curl -fsSL "$URL" | tar -xz
+            sudo mv runright /usr/local/bin/runright
+            runright --version || true
+
+  runright-start:
+    description: "Start the RunRight monitor in the background"
+    steps:
+      - run:
+          name: Start RunRight monitor
+          background: true
+          command: |
+            mkdir -p "${RUNRIGHT_OUTPUT_DIR:-.runright}"
+            runright monitor \
+              --interval  "${RUNRIGHT_INTERVAL:-5s}" \
+              --export    "${RUNRIGHT_EXPORT:-file}" \
+              --output-dir "${RUNRIGHT_OUTPUT_DIR:-.runright}" \
+              --job-id    "${CIRCLE_JOB}" \
+              --http-url  "${RUNRIGHT_HTTP_URL:-}" \
+              --slack-webhook "${RUNRIGHT_SLACK_WEBHOOK:-}" \
+              --teams-webhook "${RUNRIGHT_TEAMS_WEBHOOK:-}"
+
+  runright-stop-and-recommend:
+    description: "Stop the RunRight monitor and print recommendations"
+    steps:
+      - run:
+          name: Stop RunRight monitor
+          when: always
+          command: |
+            pkill -TERM -x runright 2>/dev/null || true
+            # Give it a moment to flush
+            sleep 1
+      - run:
+          name: RunRight recommendations
+          when: always
+          command: |
+            SUMMARY="${RUNRIGHT_OUTPUT_DIR:-.runright}/metrics-summary.json"
+            if [ -f "$SUMMARY" ]; then
+              echo "=== RunRight Recommendations ==="
+              runright recommend --metrics "$SUMMARY" --format table || true
+            else
+              echo "RunRight: no metrics file found, skipping recommendations."
+            fi
+      - store_artifacts:
+          path: .runright
+          destination: runright-metrics
+
+# ── Example job ───────────────────────────────────────────────────────────────
+
+jobs:
+  build:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - runright-install
+      - runright-start
+      - run:
+          name: Build
+          command: |
+            echo "Your build commands here"
+            # make build
+      - runright-stop-and-recommend
+
+  test:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - runright-install
+      - runright-start
+      - run:
+          name: Test
+          command: |
+            echo "Your test commands here"
+            # make test
+      - runright-stop-and-recommend
+
+workflows:
+  ci:
+    jobs:
+      - build
+      - test

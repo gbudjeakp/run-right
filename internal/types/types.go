@@ -23,7 +23,15 @@ type MachineType struct {
 	StorageType          string   `json:"storage_type"`
 	Architecture         string   `json:"architecture"`
 	OnDemandPricePerHour float64  `json:"on_demand_price_per_hour"`
+	// SpotPricePerHour is an explicitly sourced spot/preemptible price.
+	// If zero, spot data is considered unavailable and must not be inferred.
+	SpotPricePerHour float64 `json:"spot_price_per_hour,omitempty"`
+	// SpotInterruptionRatePct is an explicitly sourced interruption/preemption rate
+	// (0..100). If zero, interruption risk should not be inferred.
+	SpotInterruptionRatePct float64 `json:"spot_interruption_rate_pct,omitempty"`
 	Tags                 []string `json:"tags"`
+	// SpotRisk indicates interruption likelihood for spot/preemptible: low, medium, or high.
+	SpotRisk string `json:"spot_risk,omitempty"`
 }
 
 // MetricSnapshot is a single point-in-time reading from the metrics agent.
@@ -46,6 +54,7 @@ type MetricsSummary struct {
 	RunID           string    `json:"run_id,omitempty"`      // unique per agent invocation; used for upserts
 	Status          string    `json:"status,omitempty"`      // "heartbeat" | "completed"
 	CIPlatform      string    `json:"ci_platform,omitempty"` // "github" | "jenkins" | "gitlab" | "circleci" | "bitbucket" | "local"
+	Repository      string    `json:"repository,omitempty"` // e.g. "owner/repo" from GITHUB_REPOSITORY
 	StartTime       time.Time `json:"start_time"`
 	EndTime         time.Time `json:"end_time"`
 	DurationSeconds float64   `json:"duration_seconds"`
@@ -104,5 +113,10 @@ type Recommendation struct {
 	RequiredMemoryGiB     float64              `json:"required_memory_gib"`
 	Reasoning             string               `json:"reasoning"`
 	DurationRegressionPct *float64             `json:"duration_regression_pct,omitempty"`
-	KubernetesResources   *KubernetesResources `json:"kubernetes_resources,omitempty"`
+	// DurationRiskNote is set when the recommended machine has significantly fewer vCPUs
+	// than the current one; a CPU-bound job may run slower after the change.
+	DurationRiskNote    string               `json:"duration_risk_note,omitempty"`
+	// SpotRisk is inherited from the recommended machine's spot interruption likelihood.
+	SpotRisk            string               `json:"spot_risk,omitempty"`
+	KubernetesResources *KubernetesResources `json:"kubernetes_resources,omitempty"`
 }
