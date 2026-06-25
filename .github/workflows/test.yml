@@ -16,6 +16,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: runright
+          POSTGRES_PASSWORD: runright
+          POSTGRES_DB: runright
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd "pg_isready -U runright -d runright"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -28,4 +42,6 @@ jobs:
         run: go vet ./cmd/... ./internal/...
 
       - name: go test
+        env:
+          DATABASE_URL: postgres://runright:runright@127.0.0.1:5435/runright?sslmode=disable
         run: go test -race -count=1 ./cmd/... ./internal/...
