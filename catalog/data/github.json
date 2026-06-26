@@ -1,0 +1,8 @@
+[
+  {"id":"ubuntu-latest-2-cores", "provider":"github","family":"ubuntu-latest","series":"ubuntu-latest","vcpus":2, "memory_gib":8.0,  "network_gbps":1.0, "storage_type":"ssd","architecture":"x86_64","on_demand_price_per_hour":0.0, "tags":["github-actions","low-cost","ci","default"]},
+  {"id":"ubuntu-latest-4-cores", "provider":"github","family":"ubuntu-latest","series":"ubuntu-latest","vcpus":4, "memory_gib":16.0, "network_gbps":1.0, "storage_type":"ssd","architecture":"x86_64","on_demand_price_per_hour":0.0, "tags":["github-actions","standard","ci","default"]},
+  {"id":"ubuntu-latest-8-cores", "provider":"github","family":"ubuntu-latest","series":"ubuntu-latest","vcpus":8, "memory_gib":32.0, "network_gbps":1.0, "storage_type":"ssd","architecture":"x86_64","on_demand_price_per_hour":0.0, "tags":["github-actions","high-memory","ci"]},
+  {"id":"macos-13-large",        "provider":"github","family":"macos","series":"macos","vcpus":8, "memory_gib":32.0, "network_gbps":1.0, "storage_type":"ssd","architecture":"x86_64","on_demand_price_per_hour":0.0, "tags":["github-actions","macos","build"]},
+  {"id":"macos-14-large",        "provider":"github","family":"macos","series":"macos","vcpus":8, "memory_gib":32.0, "network_gbps":1.0, "storage_type":"ssd","architecture":"x86_64","on_demand_price_per_hour":0.0, "tags":["github-actions","macos","build"]},
+  {"id":"windows-latest",        "provider":"github","family":"windows","series":"windows","vcpus":4, "memory_gib":16.0, "network_gbps":1.0, "storage_type":"ssd","architecture":"x86_64","on_demand_price_per_hour":0.0, "tags":["github-actions","windows","ci"]}
+]

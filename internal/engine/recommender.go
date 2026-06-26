@@ -110,11 +110,28 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 		return fallbackPoolRecommendations(summary, catalog, requiredVCPUs, requiredMemGiB, currentMonthly)
 	}
 
-	// Sort: right-sized first, then by price ascending.
+	// Sort: tier first, then prefer same-provider, then by price ascending.
+	// This ensures users on GitHub Actions see GitHub machines first within each tier,
+	// and users on AWS/GCP see same-provider machines first.
 	sort.Slice(results, func(i, j int) bool {
-		if tierOrder(results[i].Tier) != tierOrder(results[j].Tier) {
-			return tierOrder(results[i].Tier) < tierOrder(results[j].Tier)
+		tierI := tierOrder(results[i].Tier)
+		tierJ := tierOrder(results[j].Tier)
+		if tierI != tierJ {
+			return tierI < tierJ
 		}
+		
+		// Within same tier, prefer same provider as detected machine
+		var detectedProvider types.Provider
+		if detected != nil {
+			detectedProvider = detected.Provider
+		}
+		sameProviderI := results[i].Machine.Provider == detectedProvider
+		sameProviderJ := results[j].Machine.Provider == detectedProvider
+		if sameProviderI != sameProviderJ {
+			return sameProviderI // true < false, so same-provider machines come first
+		}
+		
+		// Within same tier and provider preference, sort by price ascending
 		return results[i].EstimatedMonthly < results[j].EstimatedMonthly
 	})
 
