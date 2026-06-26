@@ -1,5 +1,5 @@
-import { formatFromUSD } from '../currency'
-import type { CurrencyCode } from '../currency'
+import { formatFromUSD } from '../../currency'
+import type { CurrencyCode } from '../../currency'
 import type { AlertRule, EventType } from './types'
 
 export const metricLabel = (metric: AlertRule['metric']): string => {

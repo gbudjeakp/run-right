@@ -128,3 +128,42 @@ func TestNewCollector_Defaults(t *testing.T) {
 		t.Error("runID should be non-empty")
 	}
 }
+
+func TestDetectRepository_GitHub(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "owner/repo")
+	t.Setenv("CI_PROJECT_PATH", "")
+	t.Setenv("BITBUCKET_REPO_FULL_NAME", "")
+	t.Setenv("BITBUCKET_REPO_OWNER", "")
+	t.Setenv("BITBUCKET_REPO_SLUG", "")
+	t.Setenv("BUILD_REPOSITORY_NAME", "")
+
+	if got := detectRepository(); got != "owner/repo" {
+		t.Fatalf("detectRepository() = %q, want %q", got, "owner/repo")
+	}
+}
+
+func TestDetectRepository_BitbucketOwnerSlug(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "")
+	t.Setenv("CI_PROJECT_PATH", "")
+	t.Setenv("BITBUCKET_REPO_FULL_NAME", "")
+	t.Setenv("BITBUCKET_REPO_OWNER", "my-org")
+	t.Setenv("BITBUCKET_REPO_SLUG", "my-repo")
+	t.Setenv("BUILD_REPOSITORY_NAME", "")
+
+	if got := detectRepository(); got != "my-org/my-repo" {
+		t.Fatalf("detectRepository() = %q, want %q", got, "my-org/my-repo")
+	}
+}
+
+func TestDetectRepository_Empty(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "")
+	t.Setenv("CI_PROJECT_PATH", "")
+	t.Setenv("BITBUCKET_REPO_FULL_NAME", "")
+	t.Setenv("BITBUCKET_REPO_OWNER", "")
+	t.Setenv("BITBUCKET_REPO_SLUG", "")
+	t.Setenv("BUILD_REPOSITORY_NAME", "")
+
+	if got := detectRepository(); got != "" {
+		t.Fatalf("detectRepository() = %q, want empty string", got)
+	}
+}

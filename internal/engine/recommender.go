@@ -136,7 +136,90 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 	})
 
 	// Return at most top 10 results per tier to keep output readable.
+	results = filterByCostAndPressure(results, summary, detected, requiredVCPUs, requiredMemGiB)
 	return cap(results)
+}
+
+func filterByCostAndPressure(
+	results []types.Recommendation,
+	summary types.MetricsSummary,
+	detected *types.MachineType,
+	requiredVCPUs int,
+	requiredMemGiB float64,
+) []types.Recommendation {
+	if len(results) == 0 {
+		return results
+	}
+
+	hasCheaper := false
+	for _, r := range results {
+		if r.CostDeltaPercent < 0 {
+			hasCheaper = true
+			break
+		}
+	}
+
+	constrained := isJobConstrained(summary, detected, requiredVCPUs, requiredMemGiB)
+
+	// Only surface positive-delta upgrades when there are no cheaper options
+	// and the observed workload indicates pressure on current resources.
+	if hasCheaper || !constrained {
+		filtered := make([]types.Recommendation, 0, len(results))
+		for _, r := range results {
+			if r.CostDeltaPercent <= 0 {
+				filtered = append(filtered, r)
+			}
+		}
+		if len(filtered) > 0 {
+			return filtered
+		}
+		return results
+	}
+
+	// No cheaper option and constrained workload: return only upgrade candidates,
+	// ordered cheapest-first among viable expensive recommendations.
+	upgrades := make([]types.Recommendation, 0, len(results))
+	for _, r := range results {
+		if r.CostDeltaPercent > 0 {
+			upgrades = append(upgrades, r)
+		}
+	}
+	if len(upgrades) == 0 {
+		return results
+	}
+	sort.SliceStable(upgrades, func(i, j int) bool {
+		if upgrades[i].EstimatedMonthly != upgrades[j].EstimatedMonthly {
+			return upgrades[i].EstimatedMonthly < upgrades[j].EstimatedMonthly
+		}
+		return upgrades[i].Machine.ID < upgrades[j].Machine.ID
+	})
+	return upgrades
+}
+
+func isJobConstrained(summary types.MetricsSummary, detected *types.MachineType, requiredVCPUs int, requiredMemGiB float64) bool {
+	const (
+		cpuPressureThreshold = 85.0
+		memPressureThreshold = 90.0
+	)
+
+	if summary.CPUPercentP95 >= cpuPressureThreshold {
+		return true
+	}
+	if detected != nil && detected.VCPUs > 0 && requiredVCPUs > detected.VCPUs {
+		return true
+	}
+	if detected != nil && detected.MemoryGiB > 0 {
+		if requiredMemGiB > detected.MemoryGiB {
+			return true
+		}
+		if summary.MemUsedGiBP95/detected.MemoryGiB >= memPressureThreshold/100.0 {
+			return true
+		}
+	}
+	if summary.MemTotalGiB > 0 && summary.MemUsedGiBP95/summary.MemTotalGiB >= memPressureThreshold/100.0 {
+		return true
+	}
+	return false
 }
 
 func hasPoolConstraints(summary types.MetricsSummary) bool {

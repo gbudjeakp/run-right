@@ -203,3 +203,72 @@ func TestRecommend_FallbackWhenPoolCannotSatisfyHeadroom(t *testing.T) {
 		}
 	}
 }
+
+func TestRecommend_HidesPositiveDeltaWhenCheaperExists(t *testing.T) {
+	machines := []types.MachineType{
+		{ID: "cheap", Provider: types.ProviderAWS, Series: "t", VCPUs: 2, MemoryGiB: 2, OnDemandPricePerHour: 0.05},
+		{ID: "current", Provider: types.ProviderAWS, Series: "m", VCPUs: 2, MemoryGiB: 2, OnDemandPricePerHour: 0.10},
+		{ID: "expensive", Provider: types.ProviderAWS, Series: "c", VCPUs: 4, MemoryGiB: 4, OnDemandPricePerHour: 0.20},
+	}
+
+	summary := types.MetricsSummary{
+		JobID:         "cost-filter-cheaper",
+		CPUPercentP95: 30,
+		MemUsedGiBP95: 1.0,
+		MemTotalGiB:   2.0,
+		SampleCount:   10,
+		DetectedMachine: &types.MachineType{
+			ID:                   "current",
+			Provider:             types.ProviderAWS,
+			VCPUs:                2,
+			MemoryGiB:            2,
+			OnDemandPricePerHour: 0.10,
+		},
+	}
+
+	recs := Recommend(summary, machines)
+	if len(recs) == 0 {
+		t.Fatal("expected recommendations")
+	}
+	for _, r := range recs {
+		if r.CostDeltaPercent > 0 {
+			t.Fatalf("expected no positive-delta recommendations when cheaper options exist, got %s (%.2f%%)", r.Machine.ID, r.CostDeltaPercent)
+		}
+	}
+}
+
+func TestRecommend_ShowsCheapestUpgradeWhenConstrainedAndNoCheaper(t *testing.T) {
+	machines := []types.MachineType{
+		{ID: "current", Provider: types.ProviderAWS, Series: "m", VCPUs: 2, MemoryGiB: 2, OnDemandPricePerHour: 0.10},
+		{ID: "upgrade-small", Provider: types.ProviderAWS, Series: "m", VCPUs: 4, MemoryGiB: 4, OnDemandPricePerHour: 0.12},
+		{ID: "upgrade-large", Provider: types.ProviderAWS, Series: "m", VCPUs: 8, MemoryGiB: 8, OnDemandPricePerHour: 0.20},
+	}
+
+	summary := types.MetricsSummary{
+		JobID:         "cost-filter-upgrade",
+		CPUPercentP95: 95,
+		MemUsedGiBP95: 1.8,
+		MemTotalGiB:   2.0,
+		SampleCount:   10,
+		DetectedMachine: &types.MachineType{
+			ID:                   "current",
+			Provider:             types.ProviderAWS,
+			VCPUs:                2,
+			MemoryGiB:            2,
+			OnDemandPricePerHour: 0.10,
+		},
+	}
+
+	recs := Recommend(summary, machines)
+	if len(recs) == 0 {
+		t.Fatal("expected upgrade recommendations")
+	}
+	for _, r := range recs {
+		if r.CostDeltaPercent <= 0 {
+			t.Fatalf("expected only positive-delta upgrade recommendations under constrained workload, got %s (%.2f%%)", r.Machine.ID, r.CostDeltaPercent)
+		}
+	}
+	if recs[0].Machine.ID != "upgrade-small" {
+		t.Fatalf("expected cheapest viable upgrade first, got %s", recs[0].Machine.ID)
+	}
+}
