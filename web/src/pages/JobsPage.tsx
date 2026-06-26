@@ -16,6 +16,7 @@ export default function JobsPage() {
   const { currency } = useCurrencyPreference()
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
@@ -31,11 +32,23 @@ export default function JobsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
+  async function loadJobs(showInitialLoader = false) {
+    if (showInitialLoader) setLoading(true)
+    else setRefreshing(true)
+    setError(null)
+    try {
+      const data = await fetchJobs()
+      setJobs(data)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      if (showInitialLoader) setLoading(false)
+      else setRefreshing(false)
+    }
+  }
+
   useEffect(() => {
-    fetchJobs()
-      .then(setJobs)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+    void loadJobs(true)
   }, [])
 
   // Reset to page 1 on filter/page-size change
@@ -235,6 +248,13 @@ export default function JobsPage() {
             Clear
           </button>
         )}
+        <button
+          onClick={() => void loadJobs(false)}
+          disabled={refreshing}
+          className="border border-[var(--border)] text-[var(--text-light)] font-deco text-[13px] tracking-[1px] px-3 py-2 bg-transparent hover:border-[var(--border-dark)] hover:text-[var(--text-mid)] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
         <span className="w-full sm:w-auto sm:ml-auto font-deco text-[13px] tracking-[1px] text-[var(--text-light)] self-center whitespace-nowrap text-right sm:text-left">
           {filtered.length} {filtered.length === 1 ? 'job' : 'jobs'}
         </span>
