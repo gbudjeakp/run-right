@@ -491,7 +491,35 @@ func applyDetectedMachineMetadata(summary *types.MetricsSummary) {
 	summary.DetectedMachineMatchReason = reason
 	summary.DetectedMachineConfidenceLevel = confidenceLevel(confidence)
 	if machine == nil {
+		summary.DetectedMachine = fallbackDetectedMachine(summary.CIPlatform, v, m)
+		summary.DetectedMachineConfidence = 0
 		summary.DetectedMachineConfidenceLevel = "unknown"
+		summary.DetectedMachineMatchReason = "no catalog match found; using runtime self-hosted machine metadata"
+	}
+}
+
+func fallbackDetectedMachine(ciPlatform string, vcpus int, memGiB float64) *types.MachineType {
+	id := "self-hosted"
+	if runner := strings.TrimSpace(os.Getenv("RUNNER_NAME")); runner != "" {
+		id = runner
+	}
+
+	provider := types.Provider("")
+	if ciPlatform == "github" {
+		provider = types.ProviderGitHub
+	}
+
+	return &types.MachineType{
+		ID:                   id,
+		Provider:             provider,
+		Family:               "self-hosted",
+		Series:               "self-hosted",
+		VCPUs:                vcpus,
+		MemoryGiB:            math.Round(memGiB*100) / 100,
+		StorageType:          "unknown",
+		Architecture:         runtime.GOARCH,
+		OnDemandPricePerHour: 0,
+		Tags:                 []string{"self-hosted", "runtime-detected"},
 	}
 }
 
