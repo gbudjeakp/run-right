@@ -146,8 +146,12 @@ func (s *Server) createJob(c *gin.Context) {
 		runID = &p.Summary.RunID
 	}
 
-	// Repository may be empty for local / non-GitHub runs.
-	repository := p.Summary.Repository
+	// Repository may be empty for local / non-CI runs.
+	// Persist empty values as NULL so isolated-job queries can handle them consistently.
+	var repository *string
+	if repo := strings.TrimSpace(p.Summary.Repository); repo != "" {
+		repository = &repo
+	}
 
 	// Status defaults to "completed" if not set (e.g. seed data).
 	status := p.Summary.Status
@@ -1462,7 +1466,7 @@ func (s *Server) queryJobSummaries(ctx context.Context, repository string, isola
 	var args []interface{}
 
 	if isolatedOnly {
-		repoFilter = "AND repository IS NULL"
+		repoFilter = "AND (repository IS NULL OR repository = '')"
 	} else {
 		repoFilter = "AND repository = $1"
 		args = append(args, repository)
@@ -1561,7 +1565,7 @@ func (s *Server) getRepos(c *gin.Context) {
 				job_id, COALESCE(repository, '') AS repository,
 				created_at AS last_seen, recommendations
 			FROM jobs
-			WHERE status = 'completed' AND repository IS NOT NULL
+			WHERE status = 'completed' AND COALESCE(repository, '') <> ''
 			ORDER BY job_id, created_at DESC
 		)
 		SELECT l.job_id, l.repository, l.last_seen, l.recommendations,

@@ -1,4 +1,5 @@
-import { PAGE_SIZES, pgBtnStyle, pageNumbers } from './utils'
+import { pgBtnStyle, pageNumbers } from './utils'
+import { PAGE_SIZES } from './types'
 
 interface PaginationProps {
   page: number

@@ -150,6 +150,7 @@ func (c *Collector) sendHeartbeat() {
 	summary.RunID = c.runID
 	summary.Status = "heartbeat"
 	summary.CIPlatform = detectCIPlatform()
+	summary.Repository = detectRepository()
 	applyDetectedMachineMetadata(&summary)
 	summary.RuntimeStorageClass = detectRuntimeStorageClass()
 
@@ -264,6 +265,7 @@ func (c *Collector) Flush() error {
 	summary.RunID = c.runID
 	summary.Status = "completed"
 	summary.CIPlatform = detectCIPlatform()
+	summary.Repository = detectRepository()
 	applyDetectedMachineMetadata(&summary)
 	summary.RuntimeStorageClass = detectRuntimeStorageClass()
 
@@ -382,6 +384,29 @@ func detectCIPlatform() string {
 	default:
 		return "local"
 	}
+}
+
+// detectRepository returns the repository slug (owner/repo) when available.
+// This is used to group runs in repo-centric views.
+func detectRepository() string {
+	if v := strings.TrimSpace(os.Getenv("GITHUB_REPOSITORY")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("CI_PROJECT_PATH")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("BITBUCKET_REPO_FULL_NAME")); v != "" {
+		return v
+	}
+	if owner := strings.TrimSpace(os.Getenv("BITBUCKET_REPO_OWNER")); owner != "" {
+		if slug := strings.TrimSpace(os.Getenv("BITBUCKET_REPO_SLUG")); slug != "" {
+			return owner + "/" + slug
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("BUILD_REPOSITORY_NAME")); v != "" {
+		return v
+	}
+	return ""
 }
 
 // ciPlatformToProvider converts a CI platform name (from detectCIPlatform) to
