@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/sgbudje/runright/internal/catalog"
@@ -149,5 +150,56 @@ func TestRecommend_DoesNotGuessSpotValuesWithoutCatalogData(t *testing.T) {
 	}
 	if recs[0].SpotRisk != "" {
 		t.Fatalf("expected empty spot risk when no spot data exists, got %q", recs[0].SpotRisk)
+	}
+}
+
+func TestRecommend_RespectsAllowedSeriesPool(t *testing.T) {
+	machines := catalog.All()
+	summary := types.MetricsSummary{
+		JobID:           "pool-series",
+		CPUPercentP95:   55,
+		MemUsedGiBP95:   6,
+		SampleCount:     10,
+		AllowedSeries:   []string{"c7g"},
+		DetectedMachine: &types.MachineType{ID: "m7i.2xlarge", Provider: types.ProviderAWS, VCPUs: 8, MemoryGiB: 32, OnDemandPricePerHour: 0.4032},
+	}
+
+	recs := Recommend(summary, machines)
+	if len(recs) == 0 {
+		t.Fatal("expected recommendations from constrained pool")
+	}
+	for _, r := range recs {
+		if r.Machine.Series != "c7g" {
+			t.Fatalf("expected constrained series c7g, got %s", r.Machine.Series)
+		}
+	}
+}
+
+func TestRecommend_FallbackWhenPoolCannotSatisfyHeadroom(t *testing.T) {
+	machines := []types.MachineType{
+		{ID: "c7g.large", Provider: types.ProviderAWS, Series: "c7g", VCPUs: 2, MemoryGiB: 4, OnDemandPricePerHour: 0.0725},
+		{ID: "m7i.large", Provider: types.ProviderAWS, Series: "m7i", VCPUs: 2, MemoryGiB: 8, OnDemandPricePerHour: 0.1008},
+	}
+
+	summary := types.MetricsSummary{
+		JobID:             "pool-exhausted",
+		CPUPercentP95:     95,
+		MemUsedGiBP95:     14,
+		SampleCount:       10,
+		AllowedMachineIDs: []string{"c7g.large", "m7i.large"},
+		DetectedMachine:   &types.MachineType{ID: "m7i.2xlarge", Provider: types.ProviderAWS, VCPUs: 8, MemoryGiB: 32, OnDemandPricePerHour: 0.4032},
+	}
+
+	recs := Recommend(summary, machines)
+	if len(recs) == 0 {
+		t.Fatal("expected best-effort fallback recommendations")
+	}
+	if !strings.HasPrefix(recs[0].Reasoning, "No machine ") {
+		t.Fatalf("expected pool exhaustion reasoning, got %q", recs[0].Reasoning)
+	}
+	for _, r := range recs {
+		if r.Machine.ID != "c7g.large" && r.Machine.ID != "m7i.large" {
+			t.Fatalf("fallback returned machine outside allowed pool: %s", r.Machine.ID)
+		}
 	}
 }

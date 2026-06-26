@@ -83,6 +83,9 @@ func New(cfg Config) (*Server, error) {
 		v1.PUT("/notifications/settings", s.upsertNotificationSettings)
 		v1.POST("/notifications/test", s.sendNotificationTest)
 		v1.GET("/notifications/deliveries", s.listNotificationDeliveries)
+		// User settings
+		v1.GET("/user-settings", s.getUserSettings)
+		v1.PUT("/user-settings", s.upsertUserSettings)
 		// Ownership routing.
 		v1.GET("/ownership", s.listOwnership)
 		v1.PUT("/ownership", s.upsertOwnership)
@@ -1146,6 +1149,84 @@ func (s *Server) listNotificationDeliveries(c *gin.Context) {
 		out = []deliveryLogRow{}
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+// getUserSettings retrieves user settings from the database.
+func (s *Server) getUserSettings(c *gin.Context) {
+	var otelEndpoint string
+	var allowedMachineIDs, allowedSeries, allowedFamilies pq.StringArray
+
+	err := s.db.QueryRowContext(c.Request.Context(),
+		`SELECT COALESCE(otel_endpoint,''), COALESCE(allowed_machine_ids,'{}'), COALESCE(allowed_series,'{}'), COALESCE(allowed_families,'{}')
+		 FROM user_settings WHERE id = 1`).
+		Scan(&otelEndpoint, &allowedMachineIDs, &allowedSeries, &allowedFamilies)
+
+	if err != nil && err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert pq.StringArray to []string, handling nil cases
+	machineIDs := []string{}
+	series := []string{}
+	families := []string{}
+	if allowedMachineIDs != nil {
+		machineIDs = allowedMachineIDs
+	}
+	if allowedSeries != nil {
+		series = allowedSeries
+	}
+	if allowedFamilies != nil {
+		families = allowedFamilies
+	}
+
+	c.JSON(http.StatusOK, types.UserSettings{
+		OtelEndpoint:      otelEndpoint,
+		AllowedMachineIDs: machineIDs,
+		AllowedSeries:     series,
+		AllowedFamilies:   families,
+	})
+}
+
+// upsertUserSettings updates user settings in the database.
+func (s *Server) upsertUserSettings(c *gin.Context) {
+	var settings types.UserSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert nil slices to empty arrays for database storage
+	machineIDs := settings.AllowedMachineIDs
+	if machineIDs == nil {
+		machineIDs = []string{}
+	}
+	series := settings.AllowedSeries
+	if series == nil {
+		series = []string{}
+	}
+	families := settings.AllowedFamilies
+	if families == nil {
+		families = []string{}
+	}
+
+	_, err := s.db.ExecContext(c.Request.Context(),
+		`INSERT INTO user_settings (id, otel_endpoint, allowed_machine_ids, allowed_series, allowed_families)
+		 VALUES (1, $1, $2, $3, $4)
+		 ON CONFLICT (id) DO UPDATE SET 
+		   otel_endpoint = EXCLUDED.otel_endpoint,
+		   allowed_machine_ids = EXCLUDED.allowed_machine_ids,
+		   allowed_series = EXCLUDED.allowed_series,
+		   allowed_families = EXCLUDED.allowed_families,
+		   updated_at = NOW()`,
+		settings.OtelEndpoint, pq.Array(machineIDs), pq.Array(series), pq.Array(families))
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, settings)
 }
 
 func (s *Server) loadNotificationSettingsForDispatch(ctx context.Context) (notificationSettings, map[string]string, error) {

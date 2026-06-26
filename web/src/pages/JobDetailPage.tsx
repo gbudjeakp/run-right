@@ -18,6 +18,13 @@ function DeltaCell({ pct }: { pct: number }) {
   return <span className={cls}>{sign}{pct.toFixed(1)}%</span>
 }
 
+function detectionTone(level?: string): React.CSSProperties {
+  if (level === 'high') return { color: '#2E7D32', borderColor: '#2E7D32', background: 'rgba(46,125,50,.08)' }
+  if (level === 'medium') return { color: '#9A7B5A', borderColor: '#9A7B5A', background: 'rgba(154,123,90,.10)' }
+  if (level === 'low') return { color: '#C23B22', borderColor: '#C23B22', background: 'rgba(194,59,34,.08)' }
+  return { color: '#9A7B5A', borderColor: '#D4B896', background: 'rgba(212,184,150,.12)' }
+}
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -114,6 +121,18 @@ export default function JobDetailPage() {
           <div className="stat-card">
             <div className="stat-label">Detected</div>
             <div className="stat-value" style={{ fontSize: 14 }}>{s.detected_machine.id}</div>
+            <div className="text-xs text-[var(--text-light)] mt-1">
+              {s.detected_machine.storage_type || 'unknown storage'}
+              {s.runtime_storage_class && s.runtime_storage_class !== 'unknown' ? ` · runtime ${s.runtime_storage_class}` : ''}
+            </div>
+            {(s.detected_machine_confidence_level || s.detected_machine_confidence != null) && (
+              <div className="mt-1.5">
+                <span className="badge" style={detectionTone(s.detected_machine_confidence_level)} title={s.detected_machine_match_reason || undefined}>
+                  detection {s.detected_machine_confidence_level || 'unknown'}
+                  {s.detected_machine_confidence != null ? ` (${Math.round(s.detected_machine_confidence * 100)}%)` : ''}
+                </span>
+              </div>
+            )}
           </div>
         )}
         {s.ci_platform && (

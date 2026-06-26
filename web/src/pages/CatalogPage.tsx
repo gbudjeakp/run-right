@@ -13,6 +13,10 @@ export default function CatalogPage() {
   const debouncedSearch = useDebounce(search)
   const [provider, setProvider] = useState('')
   const [arch, setArch] = useState('')
+  const [minVcpus, setMinVcpus] = useState('')
+  const [minMemoryGiB, setMinMemoryGiB] = useState('')
+  const [minNetworkGbps, setMinNetworkGbps] = useState('')
+  const [storageType, setStorageType] = useState('')
   const [sortKey, setSortKey] = useState<keyof MachineType>('on_demand_price_per_hour')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page,     setPage]     = useState(1)
@@ -32,6 +36,10 @@ export default function CatalogPage() {
       list = list.filter((m) => m.id.toLowerCase().includes(q) || m.family.toLowerCase().includes(q) || m.series.toLowerCase().includes(q))
     }
     if (arch) list = list.filter((m) => m.architecture === arch)
+    if (minVcpus) list = list.filter((m) => m.vcpus >= Number(minVcpus))
+    if (minMemoryGiB) list = list.filter((m) => m.memory_gib >= Number(minMemoryGiB))
+    if (minNetworkGbps) list = list.filter((m) => m.network_gbps >= Number(minNetworkGbps))
+    if (storageType) list = list.filter((m) => m.storage_type === storageType)
     return [...list].sort((a, b) => {
       const av = a[sortKey] as number | string
       const bv = b[sortKey] as number | string
@@ -39,7 +47,27 @@ export default function CatalogPage() {
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [machines, debouncedSearch, arch, sortKey, sortDir])
+  }, [machines, debouncedSearch, arch, minVcpus, minMemoryGiB, minNetworkGbps, storageType, sortKey, sortDir])
+
+  const vcpuOptions = useMemo(
+    () => [...new Set(machines.map((m) => m.vcpus).filter((v) => v > 0))].sort((a, b) => a - b),
+    [machines],
+  )
+
+  const networkOptions = useMemo(
+    () => [...new Set(machines.map((m) => m.network_gbps).filter((v) => v > 0))].sort((a, b) => a - b),
+    [machines],
+  )
+
+  const memoryOptions = useMemo(
+    () => [...new Set(machines.map((m) => m.memory_gib).filter((v) => v > 0))].sort((a, b) => a - b),
+    [machines],
+  )
+
+  const storageTypeOptions = useMemo(
+    () => [...new Set(machines.map((m) => m.storage_type).filter(Boolean))].sort(),
+    [machines],
+  )
 
   useEffect(() => { setPage(1) }, [filtered, pageSize])
 
@@ -58,6 +86,19 @@ export default function CatalogPage() {
 
   if (loading) return <div className="empty">Loading catalog…</div>
   if (error) return <div className="empty">Error: {error}</div>
+
+  const hasActiveFilters = Boolean(search || provider || arch || minVcpus || minMemoryGiB || minNetworkGbps || storageType)
+
+  const clearFilters = () => {
+    setSearch('')
+    setProvider('')
+    setArch('')
+    setMinVcpus('')
+    setMinMemoryGiB('')
+    setMinNetworkGbps('')
+    setStorageType('')
+    setPage(1)
+  }
 
   return (
     <div className="fadein">
@@ -80,6 +121,42 @@ export default function CatalogPage() {
           <option value="x86_64">x86_64</option>
           <option value="arm64">arm64</option>
         </select>
+        <select className="rr-select flex-1 sm:flex-none" value={minVcpus} onChange={(e) => setMinVcpus(e.target.value)}>
+          <option value="">Any vCPU count</option>
+          {vcpuOptions.map((v) => (
+            <option key={v} value={v}>{`>= ${v} vCPU${v === 1 ? '' : 's'}`}</option>
+          ))}
+        </select>
+        <select className="rr-select flex-1 sm:flex-none" value={minMemoryGiB} onChange={(e) => setMinMemoryGiB(e.target.value)}>
+          <option value="">Any memory</option>
+          {memoryOptions.map((v) => (
+            <option key={v} value={v}>{`>= ${v} GiB`}</option>
+          ))}
+        </select>
+        <select
+          className="rr-select flex-1 sm:flex-none"
+          value={minNetworkGbps}
+          onChange={(e) => setMinNetworkGbps(e.target.value)}
+        >
+          <option value="">Any network</option>
+          {networkOptions.map((v) => (
+            <option key={v} value={v}>{`>= ${v} Gbps`}</option>
+          ))}
+        </select>
+        <select className="rr-select flex-1 sm:flex-none" value={storageType} onChange={(e) => setStorageType(e.target.value)}>
+          <option value="">Any storage</option>
+          {storageTypeOptions.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="border border-[var(--border)] text-[var(--text-light)] font-deco text-[13px] tracking-[1px] px-3 py-2 bg-transparent hover:border-[var(--border-dark)] hover:text-[var(--text-mid)] transition-colors cursor-pointer"
+          >
+            Clear
+          </button>
+        )}
         <span className="font-deco text-[14px] tracking-[2px] text-[var(--text-light)] self-center ml-auto">
           {filtered.length} machines
         </span>

@@ -130,3 +130,16 @@ export const upsertOwnership = (payload: { repository: string; team_name: string
 
 export const deleteOwnership = (repository: string, teamName: string): Promise<void> =>
   api.delete('/ownership', { params: { repository, team_name: teamName } }).then(() => undefined)
+
+export interface UserSettings {
+  otel_endpoint: string
+  allowed_machine_ids: string[]
+  allowed_series: string[]
+  allowed_families: string[]
+}
+
+export const fetchUserSettings = (): Promise<UserSettings> =>
+  api.get<UserSettings>('/user-settings').then((r) => r.data)
+
+export const upsertUserSettings = (payload: UserSettings): Promise<void> =>
+  api.put('/user-settings', payload).then(() => undefined)
