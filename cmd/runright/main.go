@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -63,17 +64,20 @@ Examples:
 }
 
 var (
-	monitorDuration  time.Duration
-	monitorInterval  time.Duration
+	monitorDuration             time.Duration
+	monitorInterval             time.Duration
 	monitorExpensiveSampleEvery int
-	monitorExport    string
-	monitorOutputDir string
-	monitorJobID     string
-	monitorPromPort  int
-	monitorHTTPURL   string
-	monitorSlackURL  string
-	monitorTeamsURL  string
-	monitorDryRun    bool
+	monitorExport               string
+	monitorOutputDir            string
+	monitorJobID                string
+	monitorPromPort             int
+	monitorHTTPURL              string
+	monitorSlackURL             string
+	monitorTeamsURL             string
+	monitorDryRun               bool
+	monitorAllowedMachineIDs    string
+	monitorAllowedSeries        string
+	monitorAllowedFamilies      string
 )
 
 func init() {
@@ -88,6 +92,9 @@ func init() {
 	monitorCmd.Flags().StringVar(&monitorSlackURL, "slack-webhook", "", "Slack incoming webhook URL for slack export (or set RUNRIGHT_SLACK_WEBHOOK)")
 	monitorCmd.Flags().StringVar(&monitorTeamsURL, "teams-webhook", "", "Microsoft Teams incoming webhook URL for teams export (or set RUNRIGHT_TEAMS_WEBHOOK)")
 	monitorCmd.Flags().BoolVar(&monitorDryRun, "dry-run", false, "Print recommendation and exit non-zero if machine is not right-sized")
+	monitorCmd.Flags().StringVar(&monitorAllowedMachineIDs, "allowed-machine-ids", "", "Comma-separated machine allow-list (or RUNRIGHT_ALLOWED_MACHINE_IDS)")
+	monitorCmd.Flags().StringVar(&monitorAllowedSeries, "allowed-series", "", "Comma-separated series allow-list, e.g. c7g,m7i,n2,e2 (or RUNRIGHT_ALLOWED_SERIES)")
+	monitorCmd.Flags().StringVar(&monitorAllowedFamilies, "allowed-families", "", "Comma-separated family prefixes, e.g. c,m,r,n,e (or RUNRIGHT_ALLOWED_FAMILIES)")
 }
 
 func runMonitor(_ *cobra.Command, _ []string) error {
@@ -100,6 +107,18 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 	if monitorTeamsURL == "" {
 		monitorTeamsURL = os.Getenv("RUNRIGHT_TEAMS_WEBHOOK")
 	}
+	if monitorAllowedMachineIDs == "" {
+		monitorAllowedMachineIDs = os.Getenv("RUNRIGHT_ALLOWED_MACHINE_IDS")
+	}
+	if monitorAllowedSeries == "" {
+		monitorAllowedSeries = os.Getenv("RUNRIGHT_ALLOWED_SERIES")
+	}
+	if monitorAllowedFamilies == "" {
+		monitorAllowedFamilies = os.Getenv("RUNRIGHT_ALLOWED_FAMILIES")
+	}
+	allowedMachineIDs := parseCSV(monitorAllowedMachineIDs)
+	allowedSeries := parseCSV(monitorAllowedSeries)
+	allowedFamilies := parseCSV(monitorAllowedFamilies)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	if monitorDuration > 0 {
@@ -122,12 +141,15 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 	defer mgr.Shutdown(context.Background())
 
 	col := agent.NewCollector(agent.Config{
-		Interval:          monitorInterval,
+		Interval:             monitorInterval,
 		ExpensiveSampleEvery: monitorExpensiveSampleEvery,
-		OutputDir:         monitorOutputDir,
-		JobID:             monitorJobID,
-		HeartbeatFilePath: filepath.Join(monitorOutputDir, "metrics-heartbeat.json"),
+		OutputDir:            monitorOutputDir,
+		JobID:                monitorJobID,
+		HeartbeatFilePath:    filepath.Join(monitorOutputDir, "metrics-heartbeat.json"),
 		FlushFn: func(summary types.MetricsSummary) error {
+			summary.AllowedMachineIDs = allowedMachineIDs
+			summary.AllowedSeries = allowedSeries
+			summary.AllowedFamilies = allowedFamilies
 			// Compute recommendations and post to the HTTP backend (if configured).
 			// This runs on every heartbeat AND on the final completed flush, so
 			// the backend always has an up-to-date record for this run.
@@ -173,15 +195,21 @@ Examples:
 }
 
 var (
-	recommendMetrics  string
-	recommendProvider string
-	recommendFormat   string
+	recommendMetrics           string
+	recommendProvider          string
+	recommendFormat            string
+	recommendAllowedMachineIDs string
+	recommendAllowedSeries     string
+	recommendAllowedFamilies   string
 )
 
 func init() {
 	recommendCmd.Flags().StringVar(&recommendMetrics, "metrics", "metrics-summary.json", "Path to metrics-summary.json")
 	recommendCmd.Flags().StringVar(&recommendProvider, "provider", "", "Filter by provider: aws, gcp, or github (default: all)")
 	recommendCmd.Flags().StringVar(&recommendFormat, "format", "table", "Output format: table, json, markdown")
+	recommendCmd.Flags().StringVar(&recommendAllowedMachineIDs, "allowed-machine-ids", "", "Comma-separated machine allow-list (or RUNRIGHT_ALLOWED_MACHINE_IDS)")
+	recommendCmd.Flags().StringVar(&recommendAllowedSeries, "allowed-series", "", "Comma-separated series allow-list, e.g. c7g,m7i,n2,e2 (or RUNRIGHT_ALLOWED_SERIES)")
+	recommendCmd.Flags().StringVar(&recommendAllowedFamilies, "allowed-families", "", "Comma-separated family prefixes, e.g. c,m,r,n,e (or RUNRIGHT_ALLOWED_FAMILIES)")
 }
 
 func runRecommend(_ *cobra.Command, _ []string) error {
@@ -192,6 +220,24 @@ func runRecommend(_ *cobra.Command, _ []string) error {
 	var summary types.MetricsSummary
 	if err := json.Unmarshal(data, &summary); err != nil {
 		return fmt.Errorf("parsing metrics summary: %w", err)
+	}
+	if recommendAllowedMachineIDs == "" {
+		recommendAllowedMachineIDs = os.Getenv("RUNRIGHT_ALLOWED_MACHINE_IDS")
+	}
+	if recommendAllowedSeries == "" {
+		recommendAllowedSeries = os.Getenv("RUNRIGHT_ALLOWED_SERIES")
+	}
+	if recommendAllowedFamilies == "" {
+		recommendAllowedFamilies = os.Getenv("RUNRIGHT_ALLOWED_FAMILIES")
+	}
+	if ids := parseCSV(recommendAllowedMachineIDs); len(ids) > 0 {
+		summary.AllowedMachineIDs = ids
+	}
+	if series := parseCSV(recommendAllowedSeries); len(series) > 0 {
+		summary.AllowedSeries = series
+	}
+	if families := parseCSV(recommendAllowedFamilies); len(families) > 0 {
+		summary.AllowedFamilies = families
 	}
 
 	opts := catalog.QueryOptions{Provider: types.Provider(recommendProvider)}
@@ -212,8 +258,18 @@ func runRecommend(_ *cobra.Command, _ []string) error {
 }
 
 func printTable(recs []types.Recommendation, s types.MetricsSummary) {
-	fmt.Printf("\nJob: %s | CPU p95: %.1f%% | Mem p95: %.2f GiB | Duration: %.0fs\n\n",
+	fmt.Printf("\nJob: %s | CPU p95: %.1f%% | Mem p95: %.2f GiB | Duration: %.0fs\n",
 		s.JobID, s.CPUPercentP95, s.MemUsedGiBP95, s.DurationSeconds)
+
+	// Print the detected machine block so users can see the current baseline.
+	if s.DetectedMachine != nil {
+		m := s.DetectedMachine
+		currentMonthly := m.OnDemandPricePerHour * 720.0
+		fmt.Printf("\nDetected:  %s (%s, %d vCPUs, %.1f GiB)  $%.4f/hr  $%.2f/mo\n",
+			m.ID, m.Provider, m.VCPUs, m.MemoryGiB, m.OnDemandPricePerHour, currentMonthly)
+	}
+	fmt.Println()
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TIER\tMACHINE\tPROVIDER\tvCPUs\tMEMORY\t$/HR\t$/MO\tDELTA")
 	fmt.Fprintln(w, "----\t-------\t--------\t-----\t------\t----\t----\t-----")
@@ -264,6 +320,30 @@ func printMarkdown(recs []types.Recommendation, s types.MetricsSummary) {
 			break
 		}
 	}
+}
+
+func parseCSV(in string) []string {
+	if strings.TrimSpace(in) == "" {
+		return nil
+	}
+	parts := strings.Split(in, ",")
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		norm := strings.TrimSpace(strings.ToLower(p))
+		if norm == "" {
+			continue
+		}
+		if _, ok := seen[norm]; ok {
+			continue
+		}
+		seen[norm] = struct{}{}
+		out = append(out, norm)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ── catalog ──────────────────────────────────────────────────────────────────
@@ -350,7 +430,7 @@ Examples:
 }
 
 var (
-	verifyPreviousRec string
+	verifyPreviousRec   string
 	verifyActualMetrics string
 )
 
@@ -389,12 +469,12 @@ func runVerify(_ *cobra.Command, _ []string) error {
 	fmt.Printf("Recommended machine: %s (%d vCPUs, %.1f GiB)\n\n",
 		top.Machine.ID, top.Machine.VCPUs, top.Machine.MemoryGiB)
 
-	cpuOK  := actual.CPUPercentP95 <= float64(top.Machine.VCPUs)/float64(top.RequiredVCPUs)*float64(top.RequiredVCPUs)
-	memOK  := actual.MemUsedGiBP95 <= top.Machine.MemoryGiB
+	cpuOK := actual.CPUPercentP95 <= float64(top.Machine.VCPUs)/float64(top.RequiredVCPUs)*float64(top.RequiredVCPUs)
+	memOK := actual.MemUsedGiBP95 <= top.Machine.MemoryGiB
 
 	// Headroom checks: p95 usage should be within the recommended machine's capacity.
-	cpuFit  := actual.CPUPercentP95 <= 80.0
-	memFit  := actual.MemUsedGiBP95 <= top.Machine.MemoryGiB*0.85
+	cpuFit := actual.CPUPercentP95 <= 80.0
+	memFit := actual.MemUsedGiBP95 <= top.Machine.MemoryGiB*0.85
 
 	fmt.Fprintln(w, "CHECK\tRESULT\tACTUAL\tRECOMMENDED")
 	fmt.Fprintln(w, "-----\t------\t------\t-----------")

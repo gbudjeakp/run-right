@@ -19,6 +19,10 @@ export interface MetricsSummary {
   duration_seconds: number
   ci_platform?: string
   detected_machine?: MachineType
+  detected_machine_confidence?: number
+  detected_machine_confidence_level?: 'high' | 'medium' | 'low' | 'unknown'
+  detected_machine_match_reason?: string
+  runtime_storage_class?: 'ssd' | 'hdd' | 'unknown' | string
   cpu_percent_peak: number
   cpu_percent_avg: number
   cpu_percent_p95: number

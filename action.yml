@@ -91,6 +91,18 @@ outputs:
   detected-machine:
     description: "Machine type detected at runtime"
     value: ${{ steps.recommend.outputs.detected_machine }}
+  detected-machine-confidence:
+    description: "Confidence score (0..1) for machine detection"
+    value: ${{ steps.recommend.outputs.detected_machine_confidence }}
+  detected-machine-confidence-level:
+    description: "Confidence label for machine detection: high, medium, low, unknown"
+    value: ${{ steps.recommend.outputs.detected_machine_confidence_level }}
+  detected-storage-type:
+    description: "Storage type from the detected catalog machine (for example ebs, ssd, pd-ssd)"
+    value: ${{ steps.recommend.outputs.detected_storage_type }}
+  runtime-storage-class:
+    description: "Best-effort runtime storage class probe from the runner OS (ssd, hdd, unknown)"
+    value: ${{ steps.recommend.outputs.runtime_storage_class }}
   suggested-machine:
     description: "Top recommended machine ID"
     value: ${{ steps.recommend.outputs.suggested_machine }}

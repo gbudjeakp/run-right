@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -109,8 +110,19 @@ func FindByID(id string) *types.MachineType {
 // which avoids false positives when the CI platform is known (e.g. GitHub Actions
 // runners are hosted on Azure/GitHub infrastructure, not AWS or GCP).
 func DetectMachine(vcpus int, memTotalGiB float64, providerHint types.Provider) *types.MachineType {
+	m, _, _ := DetectMachineWithConfidence(vcpus, memTotalGiB, providerHint)
+	return m
+}
+
+// DetectMachineWithConfidence resolves a likely machine and also returns a
+// confidence score (0..1) and a short reason string.
+func DetectMachineWithConfidence(vcpus int, memTotalGiB float64, providerHint types.Provider) (*types.MachineType, float64, string) {
 	const memToleranceGiB = 2.0
-	var best *types.MachineType
+	type candidate struct {
+		m    *types.MachineType
+		diff float64
+	}
+	candidates := make([]candidate, 0, 8)
 	for i := range allMachines {
 		m := &allMachines[i]
 		if providerHint != "" && m.Provider != providerHint {
@@ -124,12 +136,62 @@ func DetectMachine(vcpus int, memTotalGiB float64, providerHint types.Provider) 
 			diff = -diff
 		}
 		if diff <= memToleranceGiB {
-			if best == nil || m.OnDemandPricePerHour < best.OnDemandPricePerHour {
-				best = m
-			}
+			candidates = append(candidates, candidate{m: m, diff: diff})
 		}
 	}
-	return best
+	if len(candidates) == 0 {
+		return nil, 0, "no matching catalog entry within memory tolerance"
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].diff == candidates[j].diff {
+			return candidates[i].m.OnDemandPricePerHour < candidates[j].m.OnDemandPricePerHour
+		}
+		return candidates[i].diff < candidates[j].diff
+	})
+
+	best := candidates[0]
+	confidence := confidenceFromMemDiff(best.diff)
+
+	if providerHint == "" {
+		providers := map[types.Provider]struct{}{}
+		for _, c := range candidates {
+			providers[c.m.Provider] = struct{}{}
+		}
+		if len(providers) > 1 {
+			confidence -= 0.20
+		}
+	}
+
+	if len(candidates) > 1 {
+		second := candidates[1]
+		if math.Abs(second.diff-best.diff) <= 0.10 {
+			confidence -= 0.15
+		}
+	}
+
+	if confidence < 0.05 {
+		confidence = 0.05
+	}
+	if confidence > 0.99 {
+		confidence = 0.99
+	}
+
+	reason := fmt.Sprintf("matched by vCPU=%d and memory diff %.2f GiB", vcpus, best.diff)
+	return best.m, confidence, reason
+}
+
+func confidenceFromMemDiff(diff float64) float64 {
+	switch {
+	case diff <= 0.25:
+		return 0.98
+	case diff <= 0.50:
+		return 0.90
+	case diff <= 1.00:
+		return 0.75
+	default:
+		return 0.60
+	}
 }
 
 func hasTags(m types.MachineType, required []string) bool {

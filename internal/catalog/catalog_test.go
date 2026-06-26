@@ -180,3 +180,32 @@ func TestDetectMachine_ProviderHintExcludesOthers(t *testing.T) {
 		t.Errorf("provider hint aws returned machine from %q", m.Provider)
 	}
 }
+
+func TestDetectMachineWithConfidence_NoMatch(t *testing.T) {
+	m, conf, reason := DetectMachineWithConfidence(999, 9999.0, "")
+	if m != nil {
+		t.Fatalf("expected nil machine for impossible spec, got %s", m.ID)
+	}
+	if conf != 0 {
+		t.Fatalf("expected zero confidence for no match, got %.2f", conf)
+	}
+	if reason == "" {
+		t.Fatal("expected non-empty reason for no match")
+	}
+}
+
+func TestDetectMachineWithConfidence_HasReasonAndScore(t *testing.T) {
+	m, conf, reason := DetectMachineWithConfidence(2, 7.0, types.ProviderGitHub)
+	if m == nil {
+		t.Fatal("expected github machine match")
+	}
+	if conf <= 0 {
+		t.Fatalf("expected positive confidence, got %.2f", conf)
+	}
+	if conf > 1 {
+		t.Fatalf("expected confidence <= 1.0, got %.2f", conf)
+	}
+	if reason == "" {
+		t.Fatal("expected non-empty detection reason")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/sgbudje/runright/internal/types"
 )
@@ -13,6 +14,7 @@ const (
 	memHeadroomFactor = 1.30 // 30% headroom above p95 memory — OOM kills are more disruptive than slowdown
 	hoursPerMonth     = 720.0
 )
+
 func spotRiskFromInterruptionRate(ratePct float64) string {
 	if ratePct <= 0 {
 		return ""
@@ -25,10 +27,16 @@ func spotRiskFromInterruptionRate(ratePct float64) string {
 	}
 	return "high"
 }
+
 // Recommend returns a ranked list of machine recommendations based on observed
 // job metrics and the provided machine catalog.
 func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []types.Recommendation {
 	detected := summary.DetectedMachine
+	poolConstrained := hasPoolConstraints(summary)
+	poolCatalog := filterCatalogByPool(catalog, summary)
+	if len(poolCatalog) > 0 {
+		catalog = poolCatalog
+	}
 
 	// Determine the vCPU and memory baselines.
 	var detectedVCPUs int
@@ -98,6 +106,10 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 		})
 	}
 
+	if len(results) == 0 && poolConstrained && len(catalog) > 0 {
+		return fallbackPoolRecommendations(summary, catalog, requiredVCPUs, requiredMemGiB, currentMonthly)
+	}
+
 	// Sort: right-sized first, then by price ascending.
 	sort.Slice(results, func(i, j int) bool {
 		if tierOrder(results[i].Tier) != tierOrder(results[j].Tier) {
@@ -108,6 +120,120 @@ func Recommend(summary types.MetricsSummary, catalog []types.MachineType) []type
 
 	// Return at most top 10 results per tier to keep output readable.
 	return cap(results)
+}
+
+func hasPoolConstraints(summary types.MetricsSummary) bool {
+	return len(summary.AllowedMachineIDs) > 0 || len(summary.AllowedSeries) > 0 || len(summary.AllowedFamilies) > 0
+}
+
+func filterCatalogByPool(catalog []types.MachineType, summary types.MetricsSummary) []types.MachineType {
+	if !hasPoolConstraints(summary) {
+		return catalog
+	}
+	idSet := make(map[string]struct{}, len(summary.AllowedMachineIDs))
+	for _, id := range summary.AllowedMachineIDs {
+		norm := strings.TrimSpace(strings.ToLower(id))
+		if norm != "" {
+			idSet[norm] = struct{}{}
+		}
+	}
+	seriesSet := make(map[string]struct{}, len(summary.AllowedSeries))
+	for _, series := range summary.AllowedSeries {
+		norm := strings.TrimSpace(strings.ToLower(series))
+		if norm != "" {
+			seriesSet[norm] = struct{}{}
+		}
+	}
+	familySet := make(map[string]struct{}, len(summary.AllowedFamilies))
+	for _, family := range summary.AllowedFamilies {
+		norm := strings.TrimSpace(strings.ToLower(family))
+		if norm != "" {
+			familySet[norm] = struct{}{}
+		}
+	}
+
+	out := make([]types.MachineType, 0, len(catalog))
+	for _, m := range catalog {
+		id := strings.ToLower(m.ID)
+		series := strings.ToLower(m.Series)
+		matched := false
+		if len(idSet) > 0 {
+			_, matched = idSet[id]
+		}
+		if !matched && len(seriesSet) > 0 {
+			_, matched = seriesSet[series]
+		}
+		if !matched && len(familySet) > 0 {
+			for family := range familySet {
+				if strings.HasPrefix(series, family) || strings.HasPrefix(id, family) {
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func fallbackPoolRecommendations(summary types.MetricsSummary, pool []types.MachineType, reqVCPUs int, reqMemGiB float64, currentMonthly float64) []types.Recommendation {
+	if len(pool) == 0 {
+		return nil
+	}
+	// When no allowed machine meets requirements, rank by smallest normalized deficit
+	// (then lowest price), and return up to 3 best-effort options from the pool.
+	sort.Slice(pool, func(i, j int) bool {
+		scoreI := deficitScore(pool[i], reqVCPUs, reqMemGiB)
+		scoreJ := deficitScore(pool[j], reqVCPUs, reqMemGiB)
+		if scoreI != scoreJ {
+			return scoreI < scoreJ
+		}
+		return pool[i].OnDemandPricePerHour < pool[j].OnDemandPricePerHour
+	})
+
+	limit := 3
+	if len(pool) < limit {
+		limit = len(pool)
+	}
+	out := make([]types.Recommendation, 0, limit)
+	for i := 0; i < limit; i++ {
+		m := pool[i]
+		estimatedMonthly := m.OnDemandPricePerHour * hoursPerMonth
+		deltaPercent := 0.0
+		if currentMonthly > 0 {
+			deltaPercent = ((estimatedMonthly - currentMonthly) / currentMonthly) * 100
+		}
+		reason := fmt.Sprintf(
+			"No machine in the allowed pool satisfies required headroom (%d vCPUs / %.1f GiB). "+
+				"Showing closest available pool option: %s (%d vCPUs / %.1f GiB).",
+			reqVCPUs, reqMemGiB, m.ID, m.VCPUs, m.MemoryGiB,
+		)
+		out = append(out, types.Recommendation{
+			Machine:           m,
+			Tier:              types.TierMoreHeadroom,
+			EstimatedMonthly:  estimatedMonthly,
+			CurrentMonthly:    currentMonthly,
+			CostDeltaPercent:  deltaPercent,
+			RequiredVCPUs:     reqVCPUs,
+			RequiredMemoryGiB: reqMemGiB,
+			Reasoning:         reason,
+		})
+	}
+	return out
+}
+
+func deficitScore(m types.MachineType, reqVCPUs int, reqMemGiB float64) float64 {
+	vcpuDeficit := 0.0
+	if m.VCPUs < reqVCPUs {
+		vcpuDeficit = float64(reqVCPUs-m.VCPUs) / float64(reqVCPUs)
+	}
+	memDeficit := 0.0
+	if m.MemoryGiB < reqMemGiB {
+		memDeficit = (reqMemGiB - m.MemoryGiB) / reqMemGiB
+	}
+	return vcpuDeficit + memDeficit
 }
 
 func classifyTier(m types.MachineType, detected *types.MachineType, reqVCPUs int, reqMemGiB float64) types.RecommendationTier {
@@ -223,4 +349,3 @@ func buildDurationRiskNote(m types.MachineType, detected *types.MachineType, req
 		(1-float64(m.VCPUs)/float64(detected.VCPUs))*100,
 	)
 }
-

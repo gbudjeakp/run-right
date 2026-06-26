@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -149,9 +150,8 @@ func (c *Collector) sendHeartbeat() {
 	summary.RunID = c.runID
 	summary.Status = "heartbeat"
 	summary.CIPlatform = detectCIPlatform()
-	if v, m := detectResources(); v > 0 && m > 0 {
-		summary.DetectedMachine = catalog.DetectMachine(v, m, ciPlatformToProvider(summary.CIPlatform))
-	}
+	applyDetectedMachineMetadata(&summary)
+	summary.RuntimeStorageClass = detectRuntimeStorageClass()
 
 	// Write partial file so OOM-killed jobs still have data for recommendations.
 	if c.cfg.HeartbeatFilePath != "" {
@@ -264,12 +264,8 @@ func (c *Collector) Flush() error {
 	summary.RunID = c.runID
 	summary.Status = "completed"
 	summary.CIPlatform = detectCIPlatform()
-
-	// Detect current machine. Cgroup-aware: reads container/pod limits first
-	// (K8s pods, DinD), falls back to OS-level counts on bare VMs.
-	if v, m := detectResources(); v > 0 && m > 0 {
-		summary.DetectedMachine = catalog.DetectMachine(v, m, ciPlatformToProvider(summary.CIPlatform))
-	}
+	applyDetectedMachineMetadata(&summary)
+	summary.RuntimeStorageClass = detectRuntimeStorageClass()
 
 	summaryPath := filepath.Join(c.cfg.OutputDir, "metrics-summary.json")
 	sf, err := os.Create(summaryPath)
@@ -451,6 +447,128 @@ func detectResources() (vcpus int, memGiB float64) {
 		}
 	}
 	return
+}
+
+func applyDetectedMachineMetadata(summary *types.MetricsSummary) {
+	if summary == nil {
+		return
+	}
+	v, m := detectResources()
+	if v <= 0 || m <= 0 {
+		summary.DetectedMachineConfidenceLevel = "unknown"
+		summary.DetectedMachineMatchReason = "insufficient runtime resources for machine detection"
+		return
+	}
+
+	machine, confidence, reason := catalog.DetectMachineWithConfidence(v, m, ciPlatformToProvider(summary.CIPlatform))
+	summary.DetectedMachine = machine
+	summary.DetectedMachineConfidence = confidence
+	summary.DetectedMachineMatchReason = reason
+	summary.DetectedMachineConfidenceLevel = confidenceLevel(confidence)
+	if machine == nil {
+		summary.DetectedMachineConfidenceLevel = "unknown"
+	}
+}
+
+func confidenceLevel(score float64) string {
+	switch {
+	case score >= 0.85:
+		return "high"
+	case score >= 0.65:
+		return "medium"
+	case score > 0:
+		return "low"
+	default:
+		return "unknown"
+	}
+}
+
+// detectRuntimeStorageClass probes the local runtime device type as a
+// best-effort hint. It does not identify cloud provider volume products.
+func detectRuntimeStorageClass() string {
+	if runtime.GOOS != "linux" {
+		return "unknown"
+	}
+
+	dev, ok := linuxRootBlockDeviceName()
+	if !ok || dev == "" {
+		return "unknown"
+	}
+
+	rotPath := filepath.Join("/sys/class/block", dev, "queue/rotational")
+	b, err := os.ReadFile(rotPath)
+	if err != nil {
+		return "unknown"
+	}
+	v := strings.TrimSpace(string(b))
+	switch v {
+	case "0":
+		return "ssd"
+	case "1":
+		return "hdd"
+	default:
+		return "unknown"
+	}
+}
+
+func linuxRootBlockDeviceName() (string, bool) {
+	b, err := os.ReadFile("/proc/self/mounts")
+	if err != nil {
+		return "", false
+	}
+	lines := strings.Split(string(b), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[1] != "/" {
+			continue
+		}
+		src := fields[0]
+		if !strings.HasPrefix(src, "/dev/") {
+			return "", false
+		}
+		name := strings.TrimPrefix(src, "/dev/")
+		if strings.HasPrefix(name, "mapper/") {
+			return "", false
+		}
+		base := trimLinuxPartitionSuffix(name)
+		if base == "" {
+			return "", false
+		}
+		return base, true
+	}
+	return "", false
+}
+
+func trimLinuxPartitionSuffix(name string) string {
+	// NVMe partitions end with pN (example: nvme0n1p1).
+	if i := strings.LastIndex(name, "p"); i > 0 {
+		suffix := name[i+1:]
+		if suffix != "" && isDigits(suffix) {
+			return name[:i]
+		}
+	}
+
+	// SATA/xvd/virtio partition names typically end with digits (example: xvda1).
+	i := len(name) - 1
+	for i >= 0 && name[i] >= '0' && name[i] <= '9' {
+		i--
+	}
+	if i < len(name)-1 {
+		return name[:i+1]
+	}
+	return name
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // cgroupV2 reads CPU quota and memory limit from the cgroup v2 unified

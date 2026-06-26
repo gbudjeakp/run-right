@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { deletePolicy, fetchPolicies, fetchRepoJobs, fetchRepos, upsertPolicy } from '../api'
+import { deletePolicy, fetchPolicies, fetchRepoJobs, fetchRepos, upsertPolicy, fetchUserSettings, upsertUserSettings, type UserSettings } from '../api'
 import { convertFromUSD, convertToUSD, useCurrencyPreference } from '../currency'
 import type { JobSummaryRow, PolicyRule, RepoSummary } from '../types'
 
@@ -16,10 +16,43 @@ export default function PoliciesPage() {
   const [repoFilter, setRepoFilter] = useState('')
   const [repos, setRepos] = useState<RepoSummary[]>([])
   const [repoJobs, setRepoJobs] = useState<JobSummaryRow[]>([])
-  const [activeTab, setActiveTab] = useState<'create' | 'list'>('create')
+  const [activeTab, setActiveTab] = useState<'create' | 'list' | 'pool'>('create')
+
+  // Pool constraints (persisted on backend)
+  const [userSettings, setUserSettings] = useState<UserSettings>({
+    otel_endpoint: '',
+    allowed_machine_ids: [],
+    allowed_series: [],
+    allowed_families: [],
+  })
+  const [poolConstraints, setPoolConstraints] = useState({
+    allowedMachineIDs: '',
+    allowedSeries: '',
+    allowedFamilies: '',
+  })
+  const [poolSaved, setPoolSaved] = useState(false)
+  const [poolLoading, setPoolLoading] = useState(true)
   const [showPolicyRepoSuggestions, setShowPolicyRepoSuggestions] = useState(false)
   const [showPolicyJobSuggestions, setShowPolicyJobSuggestions] = useState(false)
   const [showFilterRepoSuggestions, setShowFilterRepoSuggestions] = useState(false)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const settings = await fetchUserSettings()
+        setUserSettings(settings)
+        setPoolConstraints({
+          allowedMachineIDs: settings.allowed_machine_ids.join(', '),
+          allowedSeries: settings.allowed_series.join(', '),
+          allowedFamilies: settings.allowed_families.join(', '),
+        })
+      } catch {
+        // Failed to load, defaults are fine
+      } finally {
+        setPoolLoading(false)
+      }
+    })()
+  }, [])
 
   useEffect(() => {
     void refreshPolicies()
@@ -153,6 +186,61 @@ export default function PoliciesPage() {
   "detected_price_per_hour": 0.0832
 }`
 
+  function savePoolConstraints(e: React.FormEvent) {
+    e.preventDefault()
+    const updated: UserSettings = {
+      ...userSettings,
+      allowed_machine_ids: poolConstraints.allowedMachineIDs
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      allowed_series: poolConstraints.allowedSeries
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      allowed_families: poolConstraints.allowedFamilies
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    }
+    setPolicyBusy(true)
+    void upsertUserSettings(updated)
+      .then(() => {
+        setUserSettings(updated)
+        setPoolSaved(true)
+        setTimeout(() => setPoolSaved(false), 2500)
+      })
+      .catch(() => {
+        setPolicyError('Failed to save pool constraints.')
+      })
+      .finally(() => setPolicyBusy(false))
+  }
+
+  function clearPoolConstraints() {
+    const empty: UserSettings = {
+      ...userSettings,
+      allowed_machine_ids: [],
+      allowed_series: [],
+      allowed_families: [],
+    }
+    setPoolConstraints({ allowedMachineIDs: '', allowedSeries: '', allowedFamilies: '' })
+    setPolicyBusy(true)
+    void upsertUserSettings(empty)
+      .then(() => {
+        setUserSettings(empty)
+      })
+      .catch(() => {
+        setPolicyError('Failed to clear pool constraints.')
+      })
+      .finally(() => setPolicyBusy(false))
+  }
+
+  const poolEnvSnippet = [
+    poolConstraints.allowedMachineIDs ? `RUNRIGHT_ALLOWED_MACHINE_IDS: ${poolConstraints.allowedMachineIDs}` : null,
+    poolConstraints.allowedSeries ? `RUNRIGHT_ALLOWED_SERIES: ${poolConstraints.allowedSeries}` : null,
+    poolConstraints.allowedFamilies ? `RUNRIGHT_ALLOWED_FAMILIES: ${poolConstraints.allowedFamilies}` : null,
+  ].filter(Boolean).join('\n') || '# No constraints saved yet'
+
   const tabBtn = (tab: typeof activeTab, label: string) => (
     <button
       type="button"
@@ -175,6 +263,7 @@ export default function PoliciesPage() {
         <div className="flex border-b border-[var(--border)] mb-6 mt-4">
           {tabBtn('create', 'Create Policy')}
           {tabBtn('list', 'Policy List')}
+          {tabBtn('pool', 'Pool Constraints')}
         </div>
 
         {activeTab === 'create' && (
@@ -403,6 +492,81 @@ export default function PoliciesPage() {
             </div>
             </>
           )}
+          </div>
+        )}
+        {activeTab === 'pool' && (
+          <div className="mt-1">
+            {poolLoading ? (
+              <p className="text-sm text-[var(--text-light)]">Loading pool constraints...</p>
+            ) : (
+              <>
+                <p className="text-sm text-[var(--text-light)] leading-relaxed mb-5">
+                  Restrict recommendations to the machines your runner pool actually has available (AWS, GCP, or mixed). RunRight filters candidates to the allowed set before ranking, and falls back to the closest pool option when headroom cannot be met.
+                </p>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <form className="settings-form max-w-none" onSubmit={savePoolConstraints}>
+                    <div className="form-group">
+                      <label>Allowed Machine IDs</label>
+                      <input
+                        type="text"
+                        placeholder="c7g.2xlarge, m7i.xlarge"
+                        value={poolConstraints.allowedMachineIDs}
+                        onChange={(e) => setPoolConstraints((p) => ({ ...p, allowedMachineIDs: e.target.value }))}
+                      />
+                      <p className="text-xs text-[var(--text-light)] mt-1.5">Comma-separated exact instance IDs. Most specific — use when your pool is a fixed named list.</p>
+                    </div>
+                <div className="form-group">
+                  <label>Allowed Series</label>
+                  <input
+                    type="text"
+                    placeholder="c7g, m7i"
+                    value={poolConstraints.allowedSeries}
+                    onChange={(e) => setPoolConstraints((p) => ({ ...p, allowedSeries: e.target.value }))}
+                  />
+                  <p className="text-xs text-[var(--text-light)] mt-1.5">Comma-separated series names. Matches all sizes in that series (e.g. <code>c7g</code> or <code>n2</code>).</p>
+                </div>
+                <div className="form-group">
+                  <label>Allowed Families</label>
+                  <input
+                    type="text"
+                    placeholder="c, m, r"
+                    value={poolConstraints.allowedFamilies}
+                    onChange={(e) => setPoolConstraints((p) => ({ ...p, allowedFamilies: e.target.value }))}
+                  />
+                  <p className="text-xs text-[var(--text-light)] mt-1.5">Comma-separated family prefixes. Broadest filter — <code>c</code> matches all compute-optimized series (c7g, c7i, c6g…).</p>
+                </div>
+                {(poolConstraints.allowedMachineIDs || poolConstraints.allowedSeries || poolConstraints.allowedFamilies) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2.5 text-xs text-amber-800 mb-3">
+                    Constraints are applied in order: IDs → Series → Families. The most specific match wins. If no constraint is set, the full catalog is used.
+                  </div>
+                )}
+                <div className="flex items-center gap-4 flex-wrap">
+                  <button className="btn-rr" type="submit">Save Constraints</button>
+                  <button type="button" onClick={clearPoolConstraints} className="text-sm text-[var(--text-light)] underline underline-offset-2">Clear</button>
+                  {poolSaved && <span className="font-deco text-[15px] tracking-[2px] text-[#2E7D32]">Saved</span>}
+                </div>
+              </form>
+
+              <div>
+                <h3 className="font-serif text-[16px] font-bold text-[var(--text)] mb-2">Use in CI</h3>
+                <p className="text-sm text-[var(--text-light)] leading-relaxed mb-3">
+                  Pass these as environment variables or flags to <code>runright monitor</code> and <code>runright recommend</code>.
+                </p>
+                <pre className="bg-[#1A0F02] border border-[#3a2510] border-l-[3px] border-l-gold px-4 py-4 text-xs overflow-x-auto text-gold-light font-mono leading-loose whitespace-pre-wrap">{poolEnvSnippet}</pre>
+                <p className="text-xs text-[var(--text-light)] mt-3 leading-relaxed">
+                  Or pass them as flags:<br />
+                  <code>--allowed-machine-ids "c7g.2xlarge,m7i.xlarge,n2-standard-8"</code><br />
+                  <code>--allowed-series "c7g,m7i,n2,e2"</code><br />
+                  <code>--allowed-families "c,m,r,n,e"</code>
+                </p>
+                <div className="mt-4 bg-paper border border-[var(--border)] rounded px-3 py-2.5 text-xs text-[var(--text-mid)]">
+                  <strong>Fallback behaviour:</strong> when no machine in the allowed pool can meet required headroom, RunRight returns the closest available pool option with a clear note explaining the pool was exhausted — so CI never silently picks an out-of-pool machine.
+                </div>
+              </div>
+            </div>
+              </>
+            )}
           </div>
         )}
       </div>

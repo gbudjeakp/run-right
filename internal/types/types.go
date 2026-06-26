@@ -28,8 +28,8 @@ type MachineType struct {
 	SpotPricePerHour float64 `json:"spot_price_per_hour,omitempty"`
 	// SpotInterruptionRatePct is an explicitly sourced interruption/preemption rate
 	// (0..100). If zero, interruption risk should not be inferred.
-	SpotInterruptionRatePct float64 `json:"spot_interruption_rate_pct,omitempty"`
-	Tags                 []string `json:"tags"`
+	SpotInterruptionRatePct float64  `json:"spot_interruption_rate_pct,omitempty"`
+	Tags                    []string `json:"tags"`
 	// SpotRisk indicates interruption likelihood for spot/preemptible: low, medium, or high.
 	SpotRisk string `json:"spot_risk,omitempty"`
 }
@@ -50,17 +50,28 @@ type MetricSnapshot struct {
 
 // MetricsSummary aggregates a collection of snapshots into peak/avg/p95 values.
 type MetricsSummary struct {
-	JobID           string    `json:"job_id"`
-	RunID           string    `json:"run_id,omitempty"`      // unique per agent invocation; used for upserts
-	Status          string    `json:"status,omitempty"`      // "heartbeat" | "completed"
-	CIPlatform      string    `json:"ci_platform,omitempty"` // "github" | "jenkins" | "gitlab" | "circleci" | "bitbucket" | "local"
-	Repository      string    `json:"repository,omitempty"` // e.g. "owner/repo" from GITHUB_REPOSITORY
-	StartTime       time.Time `json:"start_time"`
-	EndTime         time.Time `json:"end_time"`
-	DurationSeconds float64   `json:"duration_seconds"`
+	JobID             string    `json:"job_id"`
+	RunID             string    `json:"run_id,omitempty"`              // unique per agent invocation; used for upserts
+	Status            string    `json:"status,omitempty"`              // "heartbeat" | "completed"
+	CIPlatform        string    `json:"ci_platform,omitempty"`         // "github" | "jenkins" | "gitlab" | "circleci" | "bitbucket" | "local"
+	Repository        string    `json:"repository,omitempty"`          // e.g. "owner/repo" from GITHUB_REPOSITORY
+	AllowedMachineIDs []string  `json:"allowed_machine_ids,omitempty"` // optional explicit machine allow-list (e.g. ["c7g.2xlarge","m7i.xlarge"])
+	AllowedSeries     []string  `json:"allowed_series,omitempty"`      // optional series allow-list (e.g. ["c7g","m7i"])
+	AllowedFamilies   []string  `json:"allowed_families,omitempty"`    // optional family prefixes (e.g. ["c","m","r"])
+	StartTime         time.Time `json:"start_time"`
+	EndTime           time.Time `json:"end_time"`
+	DurationSeconds   float64   `json:"duration_seconds"`
 
 	// Detected machine at the time of the run.
 	DetectedMachine *MachineType `json:"detected_machine,omitempty"`
+	// Detection confidence for DetectedMachine in range 0..1.
+	DetectedMachineConfidence float64 `json:"detected_machine_confidence,omitempty"`
+	// Detection confidence label: high, medium, low, unknown.
+	DetectedMachineConfidenceLevel string `json:"detected_machine_confidence_level,omitempty"`
+	// Human-readable reason for the machine match decision.
+	DetectedMachineMatchReason string `json:"detected_machine_match_reason,omitempty"`
+	// Best-effort runtime storage class probe (ssd|hdd|unknown).
+	RuntimeStorageClass string `json:"runtime_storage_class,omitempty"`
 
 	CPUPercentPeak float64 `json:"cpu_percent_peak"`
 	CPUPercentAvg  float64 `json:"cpu_percent_avg"`
@@ -102,21 +113,29 @@ type KubernetesResources struct {
 
 // Recommendation is a single machine type suggestion with cost and reasoning.
 type Recommendation struct {
-	Machine               MachineType          `json:"machine"`
-	Tier                  RecommendationTier   `json:"tier"`
-	EstimatedMonthly      float64              `json:"estimated_monthly_usd"`
-	SpotMonthly           float64              `json:"spot_monthly_usd"`
-	CurrentMonthly        float64              `json:"current_monthly_usd"`
-	CostDeltaPercent      float64              `json:"cost_delta_percent"`
-	SpotDeltaPercent      float64              `json:"spot_delta_percent"`
-	RequiredVCPUs         int                  `json:"required_vcpus"`
-	RequiredMemoryGiB     float64              `json:"required_memory_gib"`
-	Reasoning             string               `json:"reasoning"`
-	DurationRegressionPct *float64             `json:"duration_regression_pct,omitempty"`
+	Machine               MachineType        `json:"machine"`
+	Tier                  RecommendationTier `json:"tier"`
+	EstimatedMonthly      float64            `json:"estimated_monthly_usd"`
+	SpotMonthly           float64            `json:"spot_monthly_usd"`
+	CurrentMonthly        float64            `json:"current_monthly_usd"`
+	CostDeltaPercent      float64            `json:"cost_delta_percent"`
+	SpotDeltaPercent      float64            `json:"spot_delta_percent"`
+	RequiredVCPUs         int                `json:"required_vcpus"`
+	RequiredMemoryGiB     float64            `json:"required_memory_gib"`
+	Reasoning             string             `json:"reasoning"`
+	DurationRegressionPct *float64           `json:"duration_regression_pct,omitempty"`
 	// DurationRiskNote is set when the recommended machine has significantly fewer vCPUs
 	// than the current one; a CPU-bound job may run slower after the change.
-	DurationRiskNote    string               `json:"duration_risk_note,omitempty"`
+	DurationRiskNote string `json:"duration_risk_note,omitempty"`
 	// SpotRisk is inherited from the recommended machine's spot interruption likelihood.
 	SpotRisk            string               `json:"spot_risk,omitempty"`
 	KubernetesResources *KubernetesResources `json:"kubernetes_resources,omitempty"`
+}
+
+// UserSettings holds user-specific preferences and configurations.
+type UserSettings struct {
+	OtelEndpoint      string   `json:"otel_endpoint"`
+	AllowedMachineIDs []string `json:"allowed_machine_ids"`
+	AllowedSeries     []string `json:"allowed_series"`
+	AllowedFamilies   []string `json:"allowed_families"`
 }
