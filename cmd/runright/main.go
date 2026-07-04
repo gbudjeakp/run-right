@@ -31,7 +31,7 @@ the right AWS or GCP machine type so you stop guessing and start saving.`,
 }
 
 func main() {
-	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd, verifyCmd)
+	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd, verifyCmd, updateCmd)
 	cobra.OnInitialize(initConfig)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -504,5 +504,78 @@ func runVerify(_ *cobra.Command, _ []string) error {
 		os.Exit(2)
 	}
 	fmt.Println("\nrunright verify: recommendation validated")
+	return nil
+}
+
+// ── update ────────────────────────────────────────────────────────────────────
+
+var updateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Check for and install updates to runright",
+	Long: `update checks for a newer version of runright and optionally installs it.
+
+Examples:
+  runright update --check          # Check for updates without installing
+  runright update                  # Check and install if available
+  runright update --channel beta   # Check beta channel for updates`,
+	RunE: runUpdate,
+}
+
+var (
+	updateCheck   bool
+	updateChannel string
+	updateForce   bool
+)
+
+func init() {
+	updateCmd.Flags().BoolVar(&updateCheck, "check", false, "Only check for updates, don't install")
+	updateCmd.Flags().StringVar(&updateChannel, "channel", "stable", "Release channel: stable, beta, or nightly")
+	updateCmd.Flags().BoolVar(&updateForce, "force", false, "Force update even if already on latest version")
+}
+
+func runUpdate(_ *cobra.Command, _ []string) error {
+	cfg := agent.UpdateConfig{
+		Enabled:  true,
+		Channel:  updateChannel,
+		GitHubRepo: "gbudjeakp/run-right",
+	}
+
+	fmt.Printf("runright: checking for updates (channel: %s)...\n", updateChannel)
+
+	info, err := agent.CheckForUpdate(cfg)
+	if err != nil {
+		return fmt.Errorf("check update: %w", err)
+	}
+
+	fmt.Printf("Current version: %s\n", info.CurrentVersion)
+	fmt.Printf("Latest version:  %s\n", info.LatestVersion)
+
+	if !info.UpdateAvailable && !updateForce {
+		fmt.Println("runright: already up to date")
+		return nil
+	}
+
+	if updateCheck {
+		if info.UpdateAvailable {
+			fmt.Printf("\nUpdate available: %s -> %s\n", info.CurrentVersion, info.LatestVersion)
+			fmt.Printf("Release notes: %s\n", info.ReleaseURL)
+			if info.DownloadURL != "" {
+				fmt.Printf("Download: %s\n", info.DownloadURL)
+			}
+		}
+		return nil
+	}
+
+	if info.DownloadURL == "" {
+		return fmt.Errorf("no download available for this platform")
+	}
+
+	fmt.Printf("Downloading and installing %s...\n", info.LatestVersion)
+
+	if err := agent.SelfUpdate(cfg); err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	fmt.Println("runright: update complete. Please restart to use the new version.")
 	return nil
 }
