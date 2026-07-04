@@ -29,6 +29,7 @@ type Server struct {
 	db              *sql.DB
 	slackWebhook    string
 	alertWebhookURL string
+	ssoMgr          *ssoManager
 }
 
 // Config holds server configuration.
@@ -39,6 +40,8 @@ type Config struct {
 	DisableAuth     bool
 	SlackWebhook    string // optional; if set, weekly savings digests are posted here
 	AlertWebhookURL string // optional; if set, fired when a job consistently wastes >80% of its machine
+	BaseURL         string // Base URL for SSO callbacks, e.g. https://runright.example.com
+	SSOEnabled      bool   // Enable SSO authentication
 }
 
 // New creates a Server, runs migrations, and wires up routes.
@@ -59,6 +62,24 @@ func New(cfg Config) (*Server, error) {
 	r.Use(corsMiddleware())
 
 	s := &Server{router: r, db: db, slackWebhook: cfg.SlackWebhook, alertWebhookURL: cfg.AlertWebhookURL}
+
+	// Initialize SSO manager if enabled
+	if cfg.SSOEnabled && cfg.BaseURL != "" {
+		s.ssoMgr = newSSOManager(db, cfg.BaseURL)
+		if err := s.ssoMgr.Initialize(context.Background()); err != nil {
+			fmt.Printf("warning: SSO initialization failed: %v\n", err)
+		}
+	}
+
+	// SSO endpoints — no auth required for login/callback
+	sso := r.Group("/api/v1/sso")
+	{
+		sso.GET("/providers", s.ssoListProviders)
+		sso.GET("/login/:provider", s.ssoLogin)
+		sso.GET("/callback/:provider", s.ssoCallback)
+		sso.POST("/callback/:provider", s.ssoCallback) // SAML uses POST
+		sso.POST("/logout", s.ssoLogout)
+	}
 
 	// Auth endpoint — no middleware applied here.
 	r.POST("/api/v1/auth", authLogin(cfg.APIKey, cfg.DisableAuth))
@@ -95,6 +116,12 @@ func New(cfg Config) (*Server, error) {
 		v1.GET("/ownership", s.listOwnership)
 		v1.PUT("/ownership", s.upsertOwnership)
 		v1.DELETE("/ownership", s.deleteOwnership)
+		// SSO management (admin only)
+		v1.GET("/sso/me", s.ssoMe)
+		v1.GET("/sso/configs", s.ssoListConfigs)
+		v1.PUT("/sso/configs", s.ssoUpsertConfig)
+		v1.DELETE("/sso/configs", s.ssoDeleteConfig)
+		v1.POST("/sso/configs/test", s.ssoTestConfig)
 	}
 
 	// Badge endpoint — intentionally unauthenticated for embedding in READMEs.
@@ -2222,6 +2249,7 @@ func ConfigFromEnv() Config {
 	if !disableAuth {
 		disableAuth = strings.EqualFold(strings.TrimSpace(os.Getenv("RUNRIGHT_DEV_MODE")), "true")
 	}
+	ssoEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("RUNRIGHT_SSO_ENABLED")), "true")
 	return Config{
 		Port:            port,
 		DSN:             dsn,
@@ -2229,5 +2257,7 @@ func ConfigFromEnv() Config {
 		DisableAuth:     disableAuth,
 		SlackWebhook:    os.Getenv("RUNRIGHT_SLACK_WEBHOOK"),
 		AlertWebhookURL: os.Getenv("RUNRIGHT_ALERT_WEBHOOK"),
+		BaseURL:         os.Getenv("RUNRIGHT_BASE_URL"),
+		SSOEnabled:      ssoEnabled,
 	}
 }
