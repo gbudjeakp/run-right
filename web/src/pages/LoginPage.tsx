@@ -47,6 +47,13 @@ const ProviderIcon = ({ type }: { type: string }) => {
           <path d="M7 11V7a5 5 0 0110 0v4"/>
         </svg>
       )
+    case 'demo':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      )
     default:
       return (
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -67,7 +74,16 @@ export default function LoginPage({ onLogin }: Props) {
   const [loading, setLoading] = useState(false)
   const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([])
   const [loadingSSO, setLoadingSSO] = useState(true)
+  const [dark, setDark] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('rr-theme') === 'dark' : false
+  )
   const allowEmptyInDev = import.meta.env.DEV
+
+  // Sync dark-mode class
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('rr-theme', dark ? 'dark' : 'light')
+  }, [dark])
 
   // Fetch available SSO providers on mount
   useEffect(() => {
@@ -91,15 +107,43 @@ export default function LoginPage({ onLogin }: Props) {
     }
   }
 
-  function handleSSOLogin(provider: SSOProvider) {
-    // Redirect to SSO login endpoint
-    window.location.href = provider.login_url
+  function handleSSOLogin() {
+    // If single provider, go directly. Otherwise use first one (org's primary SSO)
+    const provider = ssoProviders[0]
+    if (provider) {
+      window.location.href = provider.login_url
+    }
   }
 
   const hasSSO = ssoProviders.length > 0
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[var(--cream)] px-4 py-8 font-sans">
+    <div className="flex items-center justify-center min-h-screen bg-[var(--cream)] px-4 py-8 font-sans relative">
+      {/* Dark mode toggle */}
+      <button
+        onClick={() => setDark(d => !d)}
+        className="absolute top-4 right-4 p-2 text-[var(--text-light)] hover:text-[var(--text)] transition-colors"
+        aria-label="Toggle dark mode"
+      >
+        {dark ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        )}
+      </button>
+
       <div className="w-full max-w-sm">
 
         {/* Card */}
@@ -107,48 +151,34 @@ export default function LoginPage({ onLogin }: Props) {
 
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
-            <LogoMark size={36} color="#2C1A0E" />
-            <div className="font-deco text-[22px] tracking-[4px] text-[var(--text)] mt-2">RUNRIGHT</div>
+            <LogoMark size={36} color="currentColor" />
+            <div className="font-deco text-[22px] tracking-[4px] mt-2">RUNRIGHT</div>
           </div>
 
-          {/* SSO Providers */}
+          {/* Single SSO Button */}
           {!loadingSSO && hasSSO && (
             <>
-              <div className="flex items-center gap-3 mb-5">
-                <div className="flex-1 h-px bg-[var(--border)]" />
-                <span className="font-deco text-[11px] tracking-[3px] text-[var(--text-light)]">SSO</span>
-                <div className="flex-1 h-px bg-[var(--border)]" />
-              </div>
-
-              <div className="space-y-3 mb-6">
-                {ssoProviders.map(provider => (
-                  <button
-                    key={provider.provider_type}
-                    type="button"
-                    onClick={() => handleSSOLogin(provider)}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-[var(--border)] bg-cream hover:bg-[var(--cream-alt)] transition-colors font-deco text-[14px] tracking-[1px] text-[var(--text)]"
-                  >
-                    <ProviderIcon type={provider.provider_type} />
-                    <span>Continue with {provider.name}</span>
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={handleSSOLogin}
+                className="w-full flex items-center justify-center gap-3 py-3.5 px-4 bg-[#2C1A0E] dark:bg-[#F5E4C8] text-[#FBF0DC] dark:text-[#2C1A0E] hover:bg-[#3D2810] dark:hover:bg-[#E8D4B8] transition-colors font-deco text-[15px] tracking-[2px] mb-6"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <span>Sign in with SSO</span>
+              </button>
 
               <div className="flex items-center gap-3 mb-5">
                 <div className="flex-1 h-px bg-[var(--border)]" />
-                <span className="font-deco text-[10px] tracking-[2px] text-[var(--text-light)]">OR</span>
+                <span className="font-deco text-[10px] tracking-[2px] text-[var(--text-light)]">OR USE API KEY</span>
                 <div className="flex-1 h-px bg-[var(--border)]" />
               </div>
             </>
           )}
 
           {/* API Key Login */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-[var(--border)]" />
-            <span className="font-deco text-[11px] tracking-[3px] text-[var(--text-light)]">API KEY</span>
-            <div className="flex-1 h-px bg-[var(--border)]" />
-          </div>
-
           <form onSubmit={handleSubmit}>
             <div className="mb-5">
               <label className="block font-deco text-[12px] tracking-[1.5px] text-[var(--text-mid)] mb-2 uppercase">
@@ -156,7 +186,7 @@ export default function LoginPage({ onLogin }: Props) {
               </label>
               <input
                 type="password"
-                className="rr-input !bg-cream"
+                className="rr-input !bg-[#FBF0DC] dark:!bg-[#21160E]"
                 placeholder="Enter your RUNRIGHT_API_KEY"
                 value={key}
                 onChange={e => setKey(e.target.value)}
@@ -175,17 +205,13 @@ export default function LoginPage({ onLogin }: Props) {
               className={[
                 'w-full py-3 font-deco text-[16px] tracking-[2px] border-none cursor-pointer transition-all',
                 (allowEmptyInDev || key) && !loading
-                  ? 'bg-red text-cream shadow-rr hover:bg-red-dark hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_rgba(92,58,30,.2)]'
-                  : 'bg-[var(--border-dark)] text-[var(--cream-alt)] opacity-60 cursor-not-allowed',
+                  ? 'bg-red text-[#FBF0DC] shadow-rr hover:bg-red-dark hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_rgba(92,58,30,.2)]'
+                  : 'bg-[#B8946A] dark:bg-[#5A3A18] text-[#F3E2C2] dark:text-[#C49D73] opacity-60 cursor-not-allowed',
               ].join(' ')}
             >
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
-
-          <p className="text-xs text-[var(--text-light)] text-center mt-5 leading-relaxed">
-            {hasSSO ? 'SSO or API key · ' : ''}Key exchanged once · HttpOnly cookie set
-          </p>
         </div>
       </div>
     </div>

@@ -181,6 +181,13 @@ func buildJobs() []payload {
 		jobs = append(jobs, makeJob("build", "github", t, awsT3Medium, cpu, mem, 185+growth*75))
 	}
 
+	// ── "build-release" job: daily release builds, compute-intensive ────────
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(30 * time.Minute)
+		jobs = append(jobs, makeJob("build-release", "github", t, awsC7g2XLarge,
+			jitter(45, 5), jitter(6, 0.5), jitter(1200, 150))) // 20 min
+	}
+
 	// ── "unit-tests" job: fast, low-resource, stable ────────────────────────
 	for i := 29; i >= 0; i-- {
 		t := now.AddDate(0, 0, -i).Add(5 * time.Minute)
@@ -191,8 +198,8 @@ func buildJobs() []payload {
 	// ── "integration-tests" job: medium load, runs every other day ──────────
 	for i := 28; i >= 0; i -= 2 {
 		t := now.AddDate(0, 0, -i).Add(12 * time.Minute)
-		jobs = append(jobs, makeJob("integration-tests", "jenkins", t, awsT3Medium,
-			jitter(55, 8), jitter(2.1, 0.2), jitter(310, 40)))
+		jobs = append(jobs, makeJob("integration-tests", "jenkins", t, awsC7gLarge,
+			jitter(55, 8), jitter(2.1, 0.2), jitter(600, 60)))
 	}
 
 	// ── "e2e-tests" job: CPU-hungry, runs twice a week ──────────────────────
@@ -230,6 +237,152 @@ func buildJobs() []payload {
 			jitter(30, 5), jitter(0.9, 0.1), jitter(95, 15)))
 	}
 
+	// ═══════════════════════════════════════════════════════════════════════
+	// NEW REPOS & JOBS
+	// ═══════════════════════════════════════════════════════════════════════
+
+	// ── Infrastructure team: terraform-plan ─────────────────────────────────
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(6 * time.Minute)
+		jobs = append(jobs, makeJob("terraform-plan", "github", t, awsT3Medium,
+			jitter(15, 3), jitter(0.4, 0.05), jitter(45, 10)))
+	}
+
+	// ── Infrastructure team: k8s-deploy (every 2 days) ──────────────────────
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(20 * time.Minute)
+		jobs = append(jobs, makeJob("k8s-deploy", "github", t, awsM6iLarge,
+			jitter(35, 4), jitter(1.2, 0.1), jitter(1800, 200))) // 30 min
+	}
+
+	// ── Infrastructure team: disaster-recovery-drill (weekly, expensive) ─────
+	for i := 28; i >= 0; i -= 7 {
+		t := now.AddDate(0, 0, -i).Add(22 * time.Minute)
+		jobs = append(jobs, makeJob("disaster-recovery-drill", "jenkins", t, awsC7g2XLarge,
+			jitter(40, 5), jitter(6, 0.5), jitter(7200, 600))) // 2 hours
+	}
+
+	// ── Infrastructure team: infra-tests ────────────────────────────────────
+	for i := 28; i >= 0; i -= 3 {
+		t := now.AddDate(0, 0, -i).Add(30 * time.Minute)
+		jobs = append(jobs, makeJob("infra-tests", "jenkins", t, gcpE2Medium,
+			jitter(35, 5), jitter(1.2, 0.1), jitter(180, 25)))
+	}
+
+	// ── Security team: sast-scan (every day) ────────────────────────────────
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(4 * time.Minute)
+		jobs = append(jobs, makeJob("sast-scan", "github", t, awsT3Medium,
+			jitter(20, 4), jitter(0.5, 0.05), jitter(90, 15)))
+	}
+
+	// ── Security team: dast-scan (weekly) ───────────────────────────────────
+	for i := 28; i >= 0; i -= 7 {
+		t := now.AddDate(0, 0, -i).Add(2 * time.Hour)
+		jobs = append(jobs, makeJob("dast-scan", "jenkins", t, awsT3Large,
+			jitter(45, 6), jitter(2.5, 0.2), jitter(1800, 200)))
+	}
+
+	// ── Security team: dependency-audit (every 3 days) ──────────────────────
+	for i := 27; i >= 0; i -= 3 {
+		t := now.AddDate(0, 0, -i).Add(15 * time.Minute)
+		jobs = append(jobs, makeJob("dependency-audit", "github", t, awsT3Medium,
+			jitter(12, 2), jitter(0.4, 0.04), jitter(35, 8)))
+	}
+
+	// ── QA team: load-tests (weekly) ────────────────────────────────────────
+	for i := 28; i >= 0; i -= 7 {
+		t := now.AddDate(0, 0, -i).Add(3 * time.Hour)
+		jobs = append(jobs, makeJob("load-tests", "jenkins", t, awsC7g2XLarge,
+			jitter(65, 8), jitter(4.5, 0.4), jitter(7200, 600))) // 2 hours
+	}
+
+	// ── QA team: perf-regression (every 2 days, compute-intensive) ─────────────
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(4 * time.Hour)
+		jobs = append(jobs, makeJob("perf-regression", "jenkins", t, awsC7g2XLarge,
+			jitter(55, 6), jitter(5, 0.5), jitter(5400, 600))) // 1.5 hours
+	}
+
+	// ── QA team: smoke-tests (every day) ────────────────────────────────────
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(22 * time.Minute)
+		jobs = append(jobs, makeJob("smoke-tests", "github", t, awsT3Medium,
+			jitter(18, 3), jitter(0.6, 0.06), jitter(55, 10)))
+	}
+
+	// ── Mobile team: ios-build (every 2 days) ───────────────────────────────
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(40 * time.Minute)
+		jobs = append(jobs, makeJob("ios-build", "github", t, awsM6iLarge,
+			jitter(72, 6), jitter(5.5, 0.4), jitter(1800, 200))) // 30 min
+	}
+
+	// ── Mobile team: ios-release (weekly, compute-intensive) ─────────────────
+	for i := 28; i >= 0; i -= 7 {
+		t := now.AddDate(0, 0, -i).Add(50 * time.Minute)
+		jobs = append(jobs, makeJob("ios-release", "github", t, awsC7g2XLarge,
+			jitter(75, 5), jitter(8, 0.6), jitter(5400, 400))) // 1.5 hours
+	}
+
+	// ── Mobile team: android-build (every 2 days) ───────────────────────────
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(45 * time.Minute)
+		jobs = append(jobs, makeJob("android-build", "github", t, awsM6iLarge,
+			jitter(68, 5), jitter(6.2, 0.5), jitter(1200, 150)))
+	}
+
+	// ── Mobile team: mobile-tests (every 3 days) ────────────────────────────
+	for i := 27; i >= 0; i -= 3 {
+		t := now.AddDate(0, 0, -i).Add(1 * time.Hour)
+		jobs = append(jobs, makeJob("mobile-tests", "jenkins", t, awsT3Large,
+			jitter(42, 5), jitter(3.2, 0.3), jitter(480, 50)))
+	}
+
+	// ── API Gateway: api-tests (every day) ──────────────────────────────────
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(10 * time.Minute)
+		jobs = append(jobs, makeJob("api-tests", "github", t, awsT3Medium,
+			jitter(25, 4), jitter(0.8, 0.08), jitter(95, 15)))
+	}
+
+	// ── API Gateway: contract-tests (every 2 days) ──────────────────────────
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(14 * time.Minute)
+		jobs = append(jobs, makeJob("contract-tests", "github", t, awsT3Medium,
+			jitter(20, 3), jitter(0.5, 0.05), jitter(65, 10)))
+	}
+
+	// ── Frontend: storybook (every day) ─────────────────────────────────────
+	for i := 29; i >= 0; i-- {
+		t := now.AddDate(0, 0, -i).Add(8 * time.Minute)
+		jobs = append(jobs, makeJob("storybook", "github", t, awsT3Medium,
+			jitter(32, 5), jitter(1.1, 0.1), jitter(180, 25)))
+	}
+
+	// ── Frontend: visual-tests (every 3 days) ───────────────────────────────
+	for i := 27; i >= 0; i -= 3 {
+		t := now.AddDate(0, 0, -i).Add(28 * time.Minute)
+		jobs = append(jobs, makeJob("visual-tests", "jenkins", t, awsT3Large,
+			jitter(38, 5), jitter(2.4, 0.2), jitter(320, 40)))
+	}
+
+	// ── ML Platform: train-model (every 3 days, very expensive) ─────────────
+	for i := 27; i >= 0; i -= 3 {
+		t := now.AddDate(0, 0, -i).Add(5 * time.Hour)
+		jobs = append(jobs, makeJob("train-model", "jenkins", t, awsP32XLarge,
+			jitter(55, 8), jitter(28, 4), jitter(18000, 2000)))
+	}
+
+	// ── ML Platform: model-eval (every 2 days) ──────────────────────────────
+	for i := 28; i >= 0; i -= 2 {
+		t := now.AddDate(0, 0, -i).Add(90 * time.Minute)
+		jobs = append(jobs, makeJob("model-eval", "jenkins", t, awsC7g2XLarge,
+			jitter(45, 6), jitter(8, 1), jitter(5400, 600)))
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════
+
 	// ── "benchmark" job: CPU-heavy, weekly on GCP ───────────────────────────
 	for i := 28; i >= 0; i -= 7 {
 		t := now.AddDate(0, 0, -i).Add(35 * time.Minute)
@@ -262,29 +415,27 @@ func buildJobs() []payload {
 	}
 
 	// ── "gpu-inference" job: p4d.24xlarge (most expensive) but only 15% util ──
-	// Runs every day, 4 hours each. Massive downsize opportunity.
-	for i := 29; i >= 0; i-- {
+	// Runs twice a week, 4 hours each. Massive downsize opportunity.
+	for i := 28; i >= 0; i -= 3 {
 		t := now.AddDate(0, 0, -i).Add(6 * time.Hour)
 		jobs = append(jobs, makeJob("gpu-inference", "jenkins", t, awsP4d24XLarge,
 			jitter(14, 3), jitter(120, 15), jitter(14400, 1500))) // 4 hours, low GPU util
 	}
 
-	// ── "ml-batch" job: p3.2xlarge but only 25% GPU util, every 2 days ───────
-	// 6-hour training runs with plenty of headroom.
-	for i := 28; i >= 0; i -= 2 {
+	// ── "ml-batch" job: p3.2xlarge but only 25% GPU util, weekly ──────────────
+	// 3-hour training runs with plenty of headroom.
+	for i := 28; i >= 0; i -= 5 {
 		t := now.AddDate(0, 0, -i).Add(2 * time.Hour)
 		jobs = append(jobs, makeJob("ml-batch", "jenkins", t, awsP32XLarge,
-			jitter(24, 4), jitter(15, 2), jitter(21600, 1800))) // 6 hours
+			jitter(24, 4), jitter(15, 2), jitter(10800, 1200))) // 3 hours
 	}
 
-	// ── "data-transform" job: g4dn.12xlarge but only 20% GPU util, 3x/week ────
+	// ── "data-transform" job: g4dn.12xlarge but only 20% GPU util, weekly ────
 	// Long-running data pipeline with spare capacity.
-	for i := 28; i >= 0; i -= 2 {
-		if i%3 == 0 { // 3x per week (~10 times per month)
-			t := now.AddDate(0, 0, -i).Add(14 * time.Hour)
-			jobs = append(jobs, makeJob("data-transform", "jenkins", t, awsG4dn12XLarge,
-				jitter(19, 4), jitter(40, 8), jitter(28800, 2400))) // 8 hours
-		}
+	for i := 28; i >= 0; i -= 7 {
+		t := now.AddDate(0, 0, -i).Add(14 * time.Hour)
+		jobs = append(jobs, makeJob("data-transform", "jenkins", t, awsG4dn12XLarge,
+			jitter(19, 4), jitter(40, 8), jitter(14400, 1200))) // 4 hours
 	}
 
 	// ── Interrupted runs ─────────────────────────────────────────────────────
@@ -372,14 +523,35 @@ func makeJob(
 
 func seededRepository(jobID string) string {
 	switch jobID {
-	case "build", "unit-tests", "integration-tests", "docker-build", "lint", "security-scan":
+	// Backend/Core team
+	case "build", "build-release", "unit-tests", "lint", "security-scan":
 		return "runrightio/app-core"
-	case "e2e-tests", "deploy-staging":
+	// Frontend team
+	case "e2e-tests", "deploy-staging", "storybook", "visual-tests":
 		return "runrightio/web-ui"
-	case "benchmark", "gcp-build", "python-tests", "ml-training", "gpu-inference", "ml-batch", "data-transform":
+	// Data Science team - data pipeline
+	case "benchmark", "gcp-build", "python-tests", "data-transform":
 		return "runrightio/data-pipeline"
+	// Data Science team - ML platform
+	case "ml-training", "gpu-inference", "ml-batch", "train-model", "model-eval":
+		return "runrightio/ml-platform"
+	// Platform Engineering
+	case "docker-build", "terraform-plan", "k8s-deploy", "infra-tests", "disaster-recovery-drill":
+		return "runrightio/infrastructure"
+	// Security team
+	case "sast-scan", "dast-scan", "dependency-audit":
+		return "runrightio/security-scanner"
+	// QA team
+	case "integration-tests", "load-tests", "smoke-tests", "perf-regression":
+		return "runrightio/test-automation"
+	// Mobile team
+	case "ios-build", "android-build", "mobile-tests", "ios-release":
+		return "runrightio/mobile-app"
+	// API Gateway
+	case "api-tests", "contract-tests":
+		return "runrightio/api-gateway"
 	default:
-		return ""
+		return "runrightio/misc"
 	}
 }
 

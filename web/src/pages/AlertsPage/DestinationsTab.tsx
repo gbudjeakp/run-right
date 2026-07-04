@@ -18,7 +18,7 @@ export interface DestinationsTabProps {
   onNote: (msg: string) => void
 }
 
-type DestinationType = 'slack' | 'teams' | 'webhooks'
+type DestinationType = 'slack' | 'teams' | 'webhooks' | 'email'
 
 export default function DestinationsTab({ settings, onSettingsChange, onError, onNote }: DestinationsTabProps) {
   const [destinationType, setDestinationType] = useState<DestinationType>('slack')
@@ -27,17 +27,21 @@ export default function DestinationsTab({ settings, onSettingsChange, onError, o
   const [newDestinationWebhook, setNewDestinationWebhook] = useState('')
   const [newDestinationChannel, setNewDestinationChannel] = useState('')
   const [newDestinationMention, setNewDestinationMention] = useState('')
+  const [newEmailRecipient, setNewEmailRecipient] = useState('')
+  const [emailSubjectPrefix, setEmailSubjectPrefix] = useState(settings.email?.subject_prefix || '[RunRight]')
 
   async function persistSettings(updated: NotificationSettings) {
     const payload = {
       ...updated,
       enabled: updated.slack.destinations.length > 0 ||
         (updated.teams?.destinations?.length ?? 0) > 0 ||
-        (updated.webhooks?.destinations?.length ?? 0) > 0,
+        (updated.webhooks?.destinations?.length ?? 0) > 0 ||
+        (updated.email?.recipients?.length ?? 0) > 0,
     }
     payload.slack.enabled = payload.slack.destinations.length > 0
     if (payload.teams) payload.teams.enabled = (payload.teams.destinations?.length ?? 0) > 0
     if (payload.webhooks) payload.webhooks.enabled = (payload.webhooks?.destinations?.length ?? 0) > 0
+    if (payload.email) payload.email.enabled = (payload.email.recipients?.length ?? 0) > 0
 
     const invalid = payload.slack.destinations.find(
       (d) => !d.has_secret && !isProbablyWebhook(d.webhook_url || '')
@@ -192,16 +196,80 @@ export default function DestinationsTab({ settings, onSettingsChange, onError, o
     setBusy(false)
   }
 
+  async function addEmailRecipient(e: React.FormEvent) {
+    e.preventDefault()
+    onError('')
+    const email = newEmailRecipient.trim()
+
+    if (!email) {
+      onError('Email address is required.')
+      return
+    }
+    // Simple email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      onError('Please enter a valid email address.')
+      return
+    }
+    if (settings.email?.recipients?.includes(email)) {
+      onError('This email address is already added.')
+      return
+    }
+
+    const updated: NotificationSettings = {
+      ...settings,
+      email: {
+        enabled: true,
+        recipients: [...(settings.email?.recipients ?? []), email],
+        subject_prefix: emailSubjectPrefix,
+      },
+    }
+
+    setNewEmailRecipient('')
+    setBusy(true)
+    await persistSettings(updated)
+    setBusy(false)
+  }
+
+  async function removeEmailRecipient(email: string) {
+    setBusy(true)
+    const updated: NotificationSettings = {
+      ...settings,
+      email: {
+        ...settings.email,
+        enabled: (settings.email?.recipients ?? []).filter((e) => e !== email).length > 0,
+        recipients: (settings.email?.recipients ?? []).filter((e) => e !== email),
+        subject_prefix: emailSubjectPrefix,
+      },
+    }
+    await persistSettings(updated)
+    setBusy(false)
+  }
+
+  async function updateEmailSubjectPrefix() {
+    setBusy(true)
+    const updated: NotificationSettings = {
+      ...settings,
+      email: {
+        ...settings.email,
+        enabled: settings.email?.enabled ?? false,
+        recipients: settings.email?.recipients ?? [],
+        subject_prefix: emailSubjectPrefix,
+      },
+    }
+    await persistSettings(updated)
+    setBusy(false)
+  }
+
   return (
     <div className="rr-card max-w-3xl">
       <h2 className="font-serif text-[18px] font-bold text-[var(--text)] mb-1">Notification Destinations</h2>
       <p className="text-sm text-[var(--text-light)] leading-relaxed mb-5">
-        Configure notification channels for alert rules: Slack, Microsoft Teams, or custom webhooks.
+        Configure notification channels for alert rules: Slack, Microsoft Teams, email, or custom webhooks.
       </p>
 
       {/* Destination type sub-tabs */}
       <div className="flex gap-1 mb-6 border-b border-[var(--border)] pb-0">
-        {(['slack', 'teams', 'webhooks'] as const).map((type) => (
+        {(['slack', 'teams', 'webhooks', 'email'] as const).map((type) => (
           <button
             key={type}
             type="button"
@@ -212,7 +280,7 @@ export default function DestinationsTab({ settings, onSettingsChange, onError, o
                 : 'border-transparent text-[var(--text-light)] hover:text-[var(--text-mid)]'
             }`}
           >
-            {type === 'slack' ? 'Slack' : type === 'teams' ? 'Teams' : 'Webhooks'}
+            {type === 'slack' ? 'Slack' : type === 'teams' ? 'Teams' : type === 'webhooks' ? 'Webhooks' : 'Email'}
           </button>
         ))}
       </div>
@@ -408,6 +476,79 @@ export default function DestinationsTab({ settings, onSettingsChange, onError, o
             </div>
             <button type="submit" className="btn-rr" disabled={busy}>
               Add Webhook Destination
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Email Destinations */}
+      {destinationType === 'email' && (
+        <div>
+          <p className="text-sm text-[var(--text-light)] leading-relaxed mb-5">
+            Add email addresses to receive alert notifications. Each recipient will receive all alerts routed to the email channel.
+          </p>
+
+          {/* Subject Prefix */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-[var(--text-mid)] mb-1">Subject Prefix</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="[RunRight]"
+                value={emailSubjectPrefix}
+                onChange={(e) => setEmailSubjectPrefix(e.target.value)}
+                className="flex-1 rr-input text-sm"
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="btn-rr text-sm"
+                onClick={() => void updateEmailSubjectPrefix()}
+                disabled={busy || emailSubjectPrefix === (settings.email?.subject_prefix || '[RunRight]')}
+              >
+                Save
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-light)] mt-1">
+              This prefix will appear at the beginning of all email subject lines.
+            </p>
+          </div>
+
+          {/* Recipients List */}
+          {(settings.email?.recipients ?? []).length > 0 && (
+            <div className="divide-y divide-[var(--border)] border border-[var(--border)] rounded mb-6">
+              {(settings.email?.recipients ?? []).map((email) => (
+                <div key={email} className="flex items-center justify-between px-4 py-3 gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm text-[var(--text)] truncate">{email}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex-shrink-0 text-xs font-deco tracking-widest text-[var(--red)] border border-[var(--red)] px-3 py-1 rounded hover:bg-[rgba(194,59,34,.06)]"
+                    onClick={() => void removeEmailRecipient(email)}
+                    disabled={busy}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add Recipient Form */}
+          <form className="settings-form" onSubmit={(e) => void addEmailRecipient(e)}>
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                placeholder="team@example.com"
+                value={newEmailRecipient}
+                onChange={(e) => setNewEmailRecipient(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+            <button type="submit" className="btn-rr" disabled={busy}>
+              Add Email Recipient
             </button>
           </form>
         </div>

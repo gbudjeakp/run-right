@@ -34,6 +34,7 @@ const (
 	SSOProviderOkta     SSOProviderType = "okta"
 	SSOProviderOIDC     SSOProviderType = "oidc"
 	SSOProviderSAML     SSOProviderType = "saml"
+	SSOProviderDemo     SSOProviderType = "demo" // Built-in demo provider for testing
 )
 
 // SSOConfig holds the configuration for an SSO provider.
@@ -308,12 +309,27 @@ func (s *Server) ssoListProviders(c *gin.Context) {
 		})
 	}
 
+	// If no providers configured, add demo for easy testing
+	if len(providers) == 0 {
+		providers = append(providers, gin.H{
+			"provider_type": "demo",
+			"name":          "SSO",
+			"login_url":     "/api/v1/sso/login/demo",
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{"providers": providers})
 }
 
 // ssoLogin initiates SSO login flow.
 func (s *Server) ssoLogin(c *gin.Context) {
 	providerName := c.Param("provider")
+
+	// Handle demo provider - instant login without OAuth
+	if providerName == string(SSOProviderDemo) {
+		s.ssoDemoLogin(c)
+		return
+	}
 
 	// Store return URL in session
 	returnURL := c.Query("return_url")
@@ -357,6 +373,65 @@ func (s *Server) ssoLogin(c *gin.Context) {
 	sessionStoreMu.Unlock()
 
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
+}
+
+// ssoDemoLogin handles demo/test login without external OAuth.
+// Creates a demo user session for easy local testing.
+func (s *Server) ssoDemoLogin(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Create demo user
+	demoUser := &SSOUser{
+		Email:       "demo@runright.local",
+		Name:        "Demo User",
+		AvatarURL:   "",
+		Provider:    "demo",
+		ProviderID:  "demo-user-1",
+		Role:        "admin", // Give demo user full access
+		LastLoginAt: time.Now(),
+	}
+
+	// Upsert demo user in database
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO sso_users (email, name, avatar_url, provider, provider_id, role, last_login_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		ON CONFLICT (email) DO UPDATE SET
+			name = EXCLUDED.name,
+			last_login_at = EXCLUDED.last_login_at
+		RETURNING id
+	`, demoUser.Email, demoUser.Name, demoUser.AvatarURL, demoUser.Provider, demoUser.ProviderID, demoUser.Role, demoUser.LastLoginAt).Scan(&demoUser.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create demo user"})
+		return
+	}
+
+	// Generate session token
+	sessionToken, err := generateSessionToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
+		return
+	}
+
+	// Store SSO session
+	ssoSession := SSOSession{
+		Token:     sessionToken,
+		UserID:    demoUser.ID,
+		Email:     demoUser.Email,
+		Provider:  "demo",
+		ExpiresAt: time.Now().Add(24 * time.Hour * 30),
+	}
+	if err := s.saveSSOSession(ctx, ssoSession); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save session"})
+		return
+	}
+
+	// Set session cookie
+	secure := isSecureContext(c)
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(sessionCookie, sessionToken, 86400*30, "/", "", secure, true)
+
+	// Redirect to dashboard
+	c.Redirect(http.StatusTemporaryRedirect, "/")
 }
 
 // ssoCallback handles OAuth2/OIDC callback.

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
+	"strings"
 	"time"
 )
 
@@ -73,6 +75,67 @@ func (c *WebhookChannel) Send(ctx context.Context, msg Message) error {
 		"sent_at":    msg.SentAt.Format(time.RFC3339),
 	}
 	return postJSON(ctx, c.URL, payload, c.Headers)
+}
+
+// EmailChannel delivers notifications via SMTP email.
+type EmailChannel struct {
+	SMTPHost      string   // e.g. "smtp.example.com:587"
+	SMTPUser      string   // SMTP username for auth
+	SMTPPass      string   // SMTP password for auth
+	FromAddress   string   // e.g. "alerts@runright.io"
+	Recipients    []string // destination email addresses
+	SubjectPrefix string   // e.g. "[RunRight]"
+}
+
+func (c *EmailChannel) Kind() string { return "email" }
+
+func (c *EmailChannel) Send(ctx context.Context, msg Message) error {
+	if len(c.Recipients) == 0 {
+		return fmt.Errorf("no email recipients configured")
+	}
+	if c.SMTPHost == "" {
+		// If no SMTP configured, log to console (demo mode)
+		fmt.Printf("[EMAIL DEMO] Would send to %v: %s - %s\n", c.Recipients, msg.Title, msg.Body)
+		return nil
+	}
+
+	subject := msg.Title
+	if c.SubjectPrefix != "" {
+		subject = c.SubjectPrefix + " " + subject
+	}
+
+	// Build plain-text email message
+	var body strings.Builder
+	body.WriteString(fmt.Sprintf("From: %s\r\n", c.FromAddress))
+	body.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(c.Recipients, ", ")))
+	body.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	body.WriteString("MIME-Version: 1.0\r\n")
+	body.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	body.WriteString("\r\n")
+	body.WriteString(msg.Body)
+	body.WriteString("\r\n\r\n---\r\n")
+	body.WriteString(fmt.Sprintf("Event: %s\r\n", msg.Event))
+	if msg.Repository != "" {
+		body.WriteString(fmt.Sprintf("Repository: %s\r\n", msg.Repository))
+	}
+	if msg.JobID != "" {
+		body.WriteString(fmt.Sprintf("Job ID: %s\r\n", msg.JobID))
+	}
+	body.WriteString(fmt.Sprintf("Rule: %s\r\n", msg.RuleName))
+	body.WriteString(fmt.Sprintf("Sent: %s\r\n", msg.SentAt.Format(time.RFC3339)))
+
+	// Use SMTP auth if credentials provided
+	var auth smtp.Auth
+	if c.SMTPUser != "" && c.SMTPPass != "" {
+		host := strings.Split(c.SMTPHost, ":")[0]
+		auth = smtp.PlainAuth("", c.SMTPUser, c.SMTPPass, host)
+	}
+
+	err := smtp.SendMail(c.SMTPHost, auth, c.FromAddress, c.Recipients, []byte(body.String()))
+	if err != nil {
+		return fmt.Errorf("smtp send: %w", err)
+	}
+	return nil
 }
 
 // postJSON marshals payload and POSTs it, applying optional extra headers.

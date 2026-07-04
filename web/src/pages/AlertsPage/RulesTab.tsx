@@ -36,6 +36,7 @@ export default function RulesTab({ rules, settings, onRulesChange, onError, onNo
   const [policies, setPolicies] = useState<PolicyRule[]>([])
   const [busy, setBusy] = useState(false)
   const [thresholdDraftCurrency, setThresholdDraftCurrency] = useState(currency)
+  const [rulesSearchQuery, setRulesSearchQuery] = useState('')
 
   const [thresholdDraft, setThresholdDraft] = useState<ThresholdRuleDraft>({
     name: '',
@@ -434,76 +435,115 @@ export default function RulesTab({ rules, settings, onRulesChange, onError, onNo
         {rules.length === 0 ? (
           <div className="empty text-base">No alert rules yet.</div>
         ) : (
-          <div className="space-y-3">
-            {rules.map((rule) => (
-              <div
-                key={rule.id}
-                className={`bg-paper border rounded px-4 py-3 ${
-                  editingRuleId === rule.id ? 'border-[var(--gold)]' : 'border-[var(--border)]'
-                }`}
-              >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <div className="font-sans font-semibold text-sm text-[var(--text)]">{rule.name}</div>
-                      <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${
-                          rule.type === 'event'
-                            ? 'bg-[var(--navy)] text-[var(--cream)]'
-                            : 'bg-[var(--gold)] text-[var(--text)]'
-                        }`}
-                      >
-                        {rule.type === 'event' ? icons.event : icons.threshold}
-                        {rule.type}
-                      </span>
+          <>
+            {/* Search bar */}
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search rules by name, repository, or destination..."
+                value={rulesSearchQuery}
+                onChange={(e) => setRulesSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 border border-[var(--border)] rounded bg-[var(--cream)] text-sm placeholder:text-[var(--text-light)] focus:outline-none focus:border-[var(--gold)]"
+              />
+            </div>
+            <div className="space-y-3">
+              {rules
+                .filter((rule) => {
+                  if (!rulesSearchQuery.trim()) return true
+                  const q = rulesSearchQuery.toLowerCase()
+                  return (
+                    rule.name.toLowerCase().includes(q) ||
+                    rule.repository?.toLowerCase().includes(q) ||
+                    rule.jobId?.toLowerCase().includes(q) ||
+                    rule.type.toLowerCase().includes(q) ||
+                    destinationNames(rule.destinationIds).toLowerCase().includes(q)
+                  )
+                })
+                .map((rule) => (
+                  <div
+                    key={rule.id}
+                    className={`bg-paper border rounded px-4 py-3 ${
+                      editingRuleId === rule.id ? 'border-[var(--gold)]' : 'border-[var(--border)]'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-sans font-semibold text-sm text-[var(--text)]">{rule.name}</div>
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                              rule.type === 'event'
+                                ? 'bg-[var(--navy)] text-[var(--cream)]'
+                                : 'bg-[var(--gold)] text-[var(--text)]'
+                            }`}
+                          >
+                            {rule.type === 'event' ? icons.event : icons.threshold}
+                            {rule.type}
+                          </span>
+                        </div>
+                        <div className="text-xs text-[var(--text-light)] mt-1">
+                          {rule.type === 'event'
+                            ? `${eventLabel(rule.event ?? 'policy_violation')}${rule.scope !== 'global' ? ` · ${rule.scope === 'job' ? `${rule.repository} / ${rule.jobId}` : rule.repository}` : ''}`
+                            : `${rule.scope.toUpperCase()} · ${metricLabel(rule.metric)} > ${rule.metric === 'max_cost_per_hour' ? `${displayCostFromUSD(rule.threshold, currency)}/hr` : `${rule.threshold} ${thresholdUnit(rule.metric)}`}${rule.repository ? ` · ${rule.repository}` : ''}${rule.jobId ? ` / ${rule.jobId}` : ''}`}
+                        </div>
+                        <div className="text-xs text-[var(--text-light)] mt-1">→ {destinationNames(rule.destinationIds)}</div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <label className="rr-switch-row rr-switch-label">
+                          <input
+                            className="rr-switch"
+                            type="checkbox"
+                            checked={rule.enabled}
+                            onChange={(e) => void toggleRuleEnabled(rule.id, e.target.checked)}
+                            disabled={busy}
+                            title={rule.enabled ? 'Disable alert rule' : 'Enable alert rule'}
+                            aria-label={rule.enabled ? 'Disable alert rule' : 'Enable alert rule'}
+                          />
+                          <span className={`rr-switch-state ${rule.enabled ? 'on' : 'off'}`}>
+                            {rule.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--border-dark)] hover:text-[var(--text-mid)] hover:bg-[var(--cream-alt)]"
+                          onClick={() => startEditRule(rule)}
+                          disabled={busy}
+                          title="Edit rule"
+                          aria-label="Edit rule"
+                        >
+                          {icons.edit}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--red-dark)] hover:text-[var(--red-dark)] hover:bg-[rgba(194,59,34,.08)]"
+                          onClick={() => void removeRule(rule.id)}
+                          disabled={busy}
+                          title="Delete rule"
+                          aria-label="Delete rule"
+                        >
+                          {icons.trash}
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-xs text-[var(--text-light)] mt-1">
-                      {rule.type === 'event'
-                        ? `${eventLabel(rule.event ?? 'policy_violation')}${rule.scope !== 'global' ? ` · ${rule.scope === 'job' ? `${rule.repository} / ${rule.jobId}` : rule.repository}` : ''}`
-                        : `${rule.scope.toUpperCase()} · ${metricLabel(rule.metric)} > ${rule.metric === 'max_cost_per_hour' ? `${displayCostFromUSD(rule.threshold, currency)}/hr` : `${rule.threshold} ${thresholdUnit(rule.metric)}`}${rule.repository ? ` · ${rule.repository}` : ''}${rule.jobId ? ` / ${rule.jobId}` : ''}`}
-                    </div>
-                    <div className="text-xs text-[var(--text-light)] mt-1">→ {destinationNames(rule.destinationIds)}</div>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <label className="rr-switch-row rr-switch-label">
-                      <input
-                        className="rr-switch"
-                        type="checkbox"
-                        checked={rule.enabled}
-                        onChange={(e) => void toggleRuleEnabled(rule.id, e.target.checked)}
-                        disabled={busy}
-                        title={rule.enabled ? 'Disable alert rule' : 'Enable alert rule'}
-                        aria-label={rule.enabled ? 'Disable alert rule' : 'Enable alert rule'}
-                      />
-                      <span className={`rr-switch-state ${rule.enabled ? 'on' : 'off'}`}>
-                        {rule.enabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--border-dark)] hover:text-[var(--text-mid)] hover:bg-[var(--cream-alt)]"
-                      onClick={() => startEditRule(rule)}
-                      disabled={busy}
-                      title="Edit rule"
-                      aria-label="Edit rule"
-                    >
-                      {icons.edit}
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--red-dark)] hover:text-[var(--red-dark)] hover:bg-[rgba(194,59,34,.08)]"
-                      onClick={() => void removeRule(rule.id)}
-                      disabled={busy}
-                      title="Delete rule"
-                      aria-label="Delete rule"
-                    >
-                      {icons.trash}
-                    </button>
-                  </div>
+                ))}
+              {rules.filter((rule) => {
+                if (!rulesSearchQuery.trim()) return true
+                const q = rulesSearchQuery.toLowerCase()
+                return (
+                  rule.name.toLowerCase().includes(q) ||
+                  rule.repository?.toLowerCase().includes(q) ||
+                  rule.jobId?.toLowerCase().includes(q) ||
+                  rule.type.toLowerCase().includes(q) ||
+                  destinationNames(rule.destinationIds).toLowerCase().includes(q)
+                )
+              }).length === 0 && rulesSearchQuery.trim() && (
+                <div className="text-sm text-[var(--text-light)] text-center py-6">
+                  No rules match your search.
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

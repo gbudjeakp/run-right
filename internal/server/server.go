@@ -30,6 +30,11 @@ type Server struct {
 	slackWebhook    string
 	alertWebhookURL string
 	ssoMgr          *ssoManager
+	// SMTP config for email notifications
+	smtpHost string
+	smtpUser string
+	smtpPass string
+	smtpFrom string
 }
 
 // Config holds server configuration.
@@ -42,6 +47,11 @@ type Config struct {
 	AlertWebhookURL string // optional; if set, fired when a job consistently wastes >80% of its machine
 	BaseURL         string // Base URL for SSO callbacks, e.g. https://runright.example.com
 	SSOEnabled      bool   // Enable SSO authentication
+	// SMTP config for email notifications
+	SMTPHost    string // SMTP server host:port, e.g. smtp.example.com:587
+	SMTPUser    string // SMTP username
+	SMTPPass    string // SMTP password
+	SMTPFrom    string // From address, e.g. alerts@runright.io
 }
 
 // New creates a Server, runs migrations, and wires up routes.
@@ -61,7 +71,16 @@ func New(cfg Config) (*Server, error) {
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
 
-	s := &Server{router: r, db: db, slackWebhook: cfg.SlackWebhook, alertWebhookURL: cfg.AlertWebhookURL}
+	s := &Server{
+		router:          r,
+		db:              db,
+		slackWebhook:    cfg.SlackWebhook,
+		alertWebhookURL: cfg.AlertWebhookURL,
+		smtpHost:        cfg.SMTPHost,
+		smtpUser:        cfg.SMTPUser,
+		smtpPass:        cfg.SMTPPass,
+		smtpFrom:        cfg.SMTPFrom,
+	}
 
 	// Initialize SSO manager if enabled
 	if cfg.SSOEnabled && cfg.BaseURL != "" {
@@ -122,6 +141,37 @@ func New(cfg Config) (*Server, error) {
 		v1.PUT("/sso/configs", s.ssoUpsertConfig)
 		v1.DELETE("/sso/configs", s.ssoDeleteConfig)
 		v1.POST("/sso/configs/test", s.ssoTestConfig)
+
+		// Teams & Organizations
+		v1.GET("/teams", s.listTeams)
+		v1.POST("/teams", s.createTeam)
+		v1.GET("/teams/:teamId", s.getTeam)
+		v1.PUT("/teams/:teamId", s.updateTeam)
+		v1.GET("/teams/:teamId/members", s.listTeamMembers)
+		v1.POST("/teams/:teamId/members/invite", s.inviteTeamMember)
+		v1.PUT("/teams/:teamId/members/:memberId", s.updateTeamMember)
+		v1.DELETE("/teams/:teamId/members/:memberId", s.removeTeamMember)
+
+		// API Keys Management
+		v1.GET("/api-keys", s.listAPIKeys)
+		v1.POST("/api-keys", s.createAPIKey)
+		v1.DELETE("/api-keys/:keyId", s.revokeAPIKey)
+
+		// Audit Logs
+		v1.GET("/audit-logs", s.listAuditLogs)
+		v1.GET("/audit-logs/:logId", s.getAuditLog)
+		v1.GET("/audit-logs/export", s.exportAuditLogs)
+
+		// Analytics & Reporting
+		v1.GET("/analytics/summary", s.getAnalyticsSummary)
+		v1.GET("/analytics/cost-breakdown", s.getCostBreakdown)
+
+		// Scheduled Reports
+		v1.GET("/reports", s.listScheduledReports)
+		v1.POST("/reports", s.createScheduledReport)
+		v1.PUT("/reports/:reportId", s.updateScheduledReport)
+		v1.DELETE("/reports/:reportId", s.deleteScheduledReport)
+		v1.POST("/reports/:reportId/run", s.runReportNow)
 	}
 
 	// Badge endpoint — intentionally unauthenticated for embedding in READMEs.
@@ -199,8 +249,8 @@ func (s *Server) createJob(c *gin.Context) {
 		// "completed" flush overwrites it. A completed record is never
 		// downgraded back to "heartbeat" (WHERE clause guards this).
 		err = s.db.QueryRowContext(c.Request.Context(), `
-			INSERT INTO jobs (job_id, run_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO jobs (job_id, run_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $4)
 			ON CONFLICT (run_id) WHERE run_id IS NOT NULL DO UPDATE SET
 				end_time         = EXCLUDED.end_time,
 				duration_seconds = EXCLUDED.duration_seconds,
@@ -215,8 +265,8 @@ func (s *Server) createJob(c *gin.Context) {
 		).Scan(&id)
 	} else {
 		err = s.db.QueryRowContext(c.Request.Context(),
-			`INSERT INTO jobs (job_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+			`INSERT INTO jobs (job_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $3) RETURNING id`,
 			p.Summary.JobID, repository,
 			p.Summary.StartTime, p.Summary.EndTime, p.Summary.DurationSeconds,
 			summaryJSON, recsJSON, status,
@@ -790,6 +840,9 @@ func (s *Server) getNotificationSettings(c *gin.Context) {
 	if settings.Rules == nil {
 		settings.Rules = []notificationAlertRule{}
 	}
+	if settings.Email.Recipients == nil {
+		settings.Email.Recipients = []string{}
+	}
 
 	secrets, err := s.loadDestinationSecrets(c.Request.Context())
 	if err != nil {
@@ -851,9 +904,17 @@ func (s *Server) upsertNotificationSettings(c *gin.Context) {
 	if settings.Rules == nil {
 		settings.Rules = []notificationAlertRule{}
 	}
+	if settings.Email.Recipients == nil {
+		settings.Email.Recipients = []string{}
+	}
 
-	if settings.Enabled && !settings.Slack.Enabled && !settings.Teams.Enabled && !settings.Webhooks.Enabled {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one destination channel (slack, teams, or webhooks) must be enabled when notifications are enabled"})
+	if settings.Enabled && !settings.Slack.Enabled && !settings.Teams.Enabled && !settings.Webhooks.Enabled && !settings.Email.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one destination channel (slack, teams, webhooks, or email) must be enabled when notifications are enabled"})
+		return
+	}
+
+	if settings.Email.Enabled && len(settings.Email.Recipients) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one email recipient is required when email is enabled"})
 		return
 	}
 
@@ -2259,5 +2320,9 @@ func ConfigFromEnv() Config {
 		AlertWebhookURL: os.Getenv("RUNRIGHT_ALERT_WEBHOOK"),
 		BaseURL:         os.Getenv("RUNRIGHT_BASE_URL"),
 		SSOEnabled:      ssoEnabled,
+		SMTPHost:        os.Getenv("RUNRIGHT_SMTP_HOST"),
+		SMTPUser:        os.Getenv("RUNRIGHT_SMTP_USER"),
+		SMTPPass:        os.Getenv("RUNRIGHT_SMTP_PASS"),
+		SMTPFrom:        os.Getenv("RUNRIGHT_SMTP_FROM"),
 	}
 }

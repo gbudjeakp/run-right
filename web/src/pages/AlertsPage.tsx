@@ -108,7 +108,7 @@ export default function AlertsPage() {
     try {
       await upsertNotificationSettings(updated)
       setSettings(updated)
-    } catch {
+    } catch (err) {
       setError('Failed to save rules.')
       throw err
     }
@@ -118,7 +118,7 @@ export default function AlertsPage() {
     setSettings(updated)
     try {
       await upsertNotificationSettings(updated)
-    } catch {
+    } catch (err) {
       setError('Failed to save settings.')
       throw err
     }

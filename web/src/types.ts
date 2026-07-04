@@ -220,7 +220,7 @@ export interface OwnershipEntry {
 }
 
 // SSO Types
-export type SSOProviderType = 'google' | 'github' | 'azuread' | 'okta' | 'oidc' | 'saml'
+export type SSOProviderType = 'google' | 'github' | 'azuread' | 'okta' | 'oidc' | 'saml' | 'demo'
 
 export interface SSOProvider {
   provider_type: SSOProviderType
