@@ -218,3 +218,44 @@ export interface OwnershipEntry {
   created_at: string
   updated_at: string
 }
+
+// SSO Types
+export type SSOProviderType = 'google' | 'github' | 'azuread' | 'okta' | 'oidc' | 'saml'
+
+export interface SSOProvider {
+  provider_type: SSOProviderType
+  name: string
+  login_url: string
+}
+
+export interface SSOUser {
+  id: string
+  email: string
+  name: string
+  avatar_url?: string
+  provider: string
+  provider_id: string
+  groups?: string[]
+  role: string
+  last_login_at: string
+  created_at: string
+}
+
+export interface SSOConfig {
+  id?: number
+  provider_type: SSOProviderType
+  name: string
+  enabled: boolean
+  client_id?: string
+  client_secret?: string
+  auth_url?: string
+  token_url?: string
+  issuer_url?: string
+  scopes?: string
+  idp_metadata_url?: string
+  sp_entity_id?: string
+  allowed_domains?: string
+  default_role?: string
+  created_at?: string
+  updated_at?: string
+}

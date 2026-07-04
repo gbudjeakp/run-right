@@ -5,6 +5,7 @@ import JobDetailPage from './pages/JobDetailPage'
 import JobGroupPage from './pages/JobGroupPage'
 import CatalogPage from './pages/CatalogPage'
 import SettingsPage from './pages/SettingsPage'
+import SSOSettingsPage from './pages/SSOSettingsPage'
 import PoliciesPage from './pages/PoliciesPage'
 import AlertsPage from './pages/AlertsPage'
 import LoginPage from './pages/LoginPage'
@@ -63,6 +64,7 @@ function AppRoutes() {
         <Route path="jobs/:id" element={<JobDetailPage />} />
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="sso" element={<SSOSettingsPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="policies" element={<PoliciesPage />} />
         <Route path="repos" element={<ReposPage />} />
@@ -167,6 +169,14 @@ const SettingsIcon = ({ className }: NavIconProps) => (
   <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <circle cx="12" cy="12" r="3"/>
     <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.7z"/>
+  </svg>
+)
+
+const SSOIcon = ({ className }: NavIconProps) => (
+  <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    <circle cx="12" cy="16" r="1"/>
   </svg>
 )
 
@@ -324,6 +334,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
         <SideLink to="/app/policies" onClick={closeMobile} collapsed={desktopCollapsed} icon={PolicyIcon}>Policy</SideLink>
         <SideLink to="/app/alerts" onClick={closeMobile} collapsed={desktopCollapsed} icon={AlertsIcon}>Alerts</SideLink>
         <SideLink to="/app/settings" onClick={closeMobile} collapsed={desktopCollapsed} icon={SettingsIcon}>Settings</SideLink>
+        <SideLink to="/app/sso" onClick={closeMobile} collapsed={desktopCollapsed} icon={SSOIcon}>SSO</SideLink>
 
         <div className="mt-auto flex flex-col pt-4 border-t border-[var(--sidebar-border)]">
           <SideBtn onClick={() => setDark(d => !d)} collapsed={desktopCollapsed}>

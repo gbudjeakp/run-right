@@ -1,6 +1,61 @@
-import { useState } from 'react'
-import { login } from '../api'
+import { useState, useEffect } from 'react'
+import { login, fetchSSOProviders } from '../api'
+import type { SSOProvider } from '../types'
 import LogoMark from '../components/LogoMark'
+
+// Provider icons as simple SVG components
+const ProviderIcon = ({ type }: { type: string }) => {
+  switch (type) {
+    case 'google':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+      )
+    case 'github':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+      )
+    case 'azuread':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M0 0h11.377v11.372H0zm12.623 0H24v11.372H12.623zM0 12.623h11.377V24H0zm12.623 0H24V24H12.623z" fill="#00A4EF"/>
+        </svg>
+      )
+    case 'okta':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.389 0 0 5.389 0 12s5.389 12 12 12 12-5.389 12-12S18.611 0 12 0zm0 18c-3.314 0-6-2.686-6-6s2.686-6 6-6 6 2.686 6 6-2.686 6-6 6z"/>
+        </svg>
+      )
+    case 'oidc':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+      )
+    case 'saml':
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+      )
+    default:
+      return (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+      )
+  }
+}
 
 interface Props {
   onLogin: () => void
@@ -10,7 +65,17 @@ export default function LoginPage({ onLogin }: Props) {
   const [key, setKey] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([])
+  const [loadingSSO, setLoadingSSO] = useState(true)
   const allowEmptyInDev = import.meta.env.DEV
+
+  // Fetch available SSO providers on mount
+  useEffect(() => {
+    fetchSSOProviders()
+      .then(providers => setSSOProviders(providers))
+      .catch(() => setSSOProviders([]))
+      .finally(() => setLoadingSSO(false))
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -26,6 +91,13 @@ export default function LoginPage({ onLogin }: Props) {
     }
   }
 
+  function handleSSOLogin(provider: SSOProvider) {
+    // Redirect to SSO login endpoint
+    window.location.href = provider.login_url
+  }
+
+  const hasSSO = ssoProviders.length > 0
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-[var(--cream)] px-4 py-8 font-sans">
       <div className="w-full max-w-sm">
@@ -39,10 +111,41 @@ export default function LoginPage({ onLogin }: Props) {
             <div className="font-deco text-[22px] tracking-[4px] text-[var(--text)] mt-2">RUNRIGHT</div>
           </div>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-7">
+          {/* SSO Providers */}
+          {!loadingSSO && hasSSO && (
+            <>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 h-px bg-[var(--border)]" />
+                <span className="font-deco text-[11px] tracking-[3px] text-[var(--text-light)]">SSO</span>
+                <div className="flex-1 h-px bg-[var(--border)]" />
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {ssoProviders.map(provider => (
+                  <button
+                    key={provider.provider_type}
+                    type="button"
+                    onClick={() => handleSSOLogin(provider)}
+                    className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-[var(--border)] bg-cream hover:bg-[var(--cream-alt)] transition-colors font-deco text-[14px] tracking-[1px] text-[var(--text)]"
+                  >
+                    <ProviderIcon type={provider.provider_type} />
+                    <span>Continue with {provider.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 h-px bg-[var(--border)]" />
+                <span className="font-deco text-[10px] tracking-[2px] text-[var(--text-light)]">OR</span>
+                <div className="flex-1 h-px bg-[var(--border)]" />
+              </div>
+            </>
+          )}
+
+          {/* API Key Login */}
+          <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-[var(--border)]" />
-            <span className="font-deco text-[11px] tracking-[3px] text-[var(--text-light)]">SIGN IN</span>
+            <span className="font-deco text-[11px] tracking-[3px] text-[var(--text-light)]">API KEY</span>
             <div className="flex-1 h-px bg-[var(--border)]" />
           </div>
 
@@ -57,7 +160,7 @@ export default function LoginPage({ onLogin }: Props) {
                 placeholder="Enter your RUNRIGHT_API_KEY"
                 value={key}
                 onChange={e => setKey(e.target.value)}
-                autoFocus
+                autoFocus={!hasSSO}
                 autoComplete="current-password"
               />
             </div>
@@ -81,7 +184,7 @@ export default function LoginPage({ onLogin }: Props) {
           </form>
 
           <p className="text-xs text-[var(--text-light)] text-center mt-5 leading-relaxed">
-            Key exchanged once · HttpOnly cookie set<br />Never stored in browser
+            {hasSSO ? 'SSO or API key · ' : ''}Key exchanged once · HttpOnly cookie set
           </p>
         </div>
       </div>
