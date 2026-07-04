@@ -3,13 +3,18 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -2039,12 +2044,34 @@ func (s *Server) postWeeklyDigest() {
 
 // --- CORS middleware ---
 
+// allowedOrigins returns the list of allowed origins from env or defaults.
+func allowedOrigins() []string {
+	origins := os.Getenv("RUNRIGHT_ALLOWED_ORIGINS")
+	if origins == "" {
+		// Default: allow localhost for development
+		return []string{"http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"}
+	}
+	return strings.Split(origins, ",")
+}
+
 func corsMiddleware() gin.HandlerFunc {
+	allowed := allowedOrigins()
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		// Check if origin is allowed
+		originAllowed := false
+		for _, o := range allowed {
+			if strings.TrimSpace(o) == origin {
+				originAllowed = true
+				break
+			}
+		}
+		if originAllowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -2058,6 +2085,38 @@ func corsMiddleware() gin.HandlerFunc {
 // --- Auth handlers + middleware ---
 
 const sessionCookie = "runright_session"
+
+// sessionStore maps session tokens to API keys (simple in-memory store).
+// In production, consider using Redis or database-backed sessions.
+var (
+	sessionStore   = make(map[string]string)
+	sessionStoreMu sync.RWMutex
+)
+
+// generateSessionToken creates a cryptographically secure random session token.
+func generateSessionToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// hashAPIKey creates a SHA-256 hash of the API key for session lookup.
+func hashAPIKey(apiKey string) string {
+	h := sha256.Sum256([]byte(apiKey))
+	return hex.EncodeToString(h[:])
+}
+
+// isSecureContext checks if the request is over HTTPS.
+func isSecureContext(c *gin.Context) bool {
+	// Check X-Forwarded-Proto (common behind reverse proxies)
+	if proto := c.GetHeader("X-Forwarded-Proto"); proto == "https" {
+		return true
+	}
+	// Check if TLS connection
+	return c.Request.TLS != nil
+}
 
 // authLogin validates the API key and issues an HttpOnly session cookie.
 func authLogin(apiKey string, disableAuth bool) gin.HandlerFunc {
@@ -2074,20 +2133,42 @@ func authLogin(apiKey string, disableAuth bool) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "api_key required"})
 			return
 		}
-		if body.APIKey != apiKey {
+		// Use constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(body.APIKey), []byte(apiKey)) != 1 {
+			// Add small delay to further mitigate timing attacks
+			time.Sleep(100 * time.Millisecond)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid api_key"})
 			return
 		}
-		// Set HttpOnly, SameSite=Strict cookie. JS cannot read this.
+		// Generate a random session token instead of storing the raw API key
+		sessionToken, err := generateSessionToken()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
+			return
+		}
+		// Store the session token -> API key hash mapping
+		sessionStoreMu.Lock()
+		sessionStore[sessionToken] = hashAPIKey(apiKey)
+		sessionStoreMu.Unlock()
+
+		// Set HttpOnly, SameSite=Strict cookie
+		// Use Secure flag when in HTTPS context
+		secure := isSecureContext(c)
 		c.SetSameSite(http.SameSiteStrictMode)
-		c.SetCookie(sessionCookie, apiKey, 86400*30, "/", "", false, true /* httpOnly */)
+		c.SetCookie(sessionCookie, sessionToken, 86400*30, "/", "", secure, true /* httpOnly */)
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }
 
-// authLogout clears the session cookie.
+// authLogout clears the session cookie and invalidates the session.
 func authLogout() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Invalidate the session token
+		if token, err := c.Cookie(sessionCookie); err == nil {
+			sessionStoreMu.Lock()
+			delete(sessionStore, token)
+			sessionStoreMu.Unlock()
+		}
 		c.SetSameSite(http.SameSiteStrictMode)
 		c.SetCookie(sessionCookie, "", -1, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"status": "logged out"})
@@ -2096,6 +2177,7 @@ func authLogout() gin.HandlerFunc {
 
 // authMiddleware accepts either the HttpOnly cookie or a Bearer token (for CLI/curl).
 func authMiddleware(apiKey string, disableAuth bool) gin.HandlerFunc {
+	apiKeyHash := hashAPIKey(apiKey)
 	return func(c *gin.Context) {
 		// If auth is disabled or no API key is configured, skip auth (dev mode).
 		if disableAuth || apiKey == "" {
@@ -2103,14 +2185,23 @@ func authMiddleware(apiKey string, disableAuth bool) gin.HandlerFunc {
 			return
 		}
 		// Check HttpOnly cookie first (dashboard).
-		if cookie, err := c.Cookie(sessionCookie); err == nil && cookie == apiKey {
-			c.Next()
-			return
+		if token, err := c.Cookie(sessionCookie); err == nil {
+			sessionStoreMu.RLock()
+			storedHash, exists := sessionStore[token]
+			sessionStoreMu.RUnlock()
+			if exists && subtle.ConstantTimeCompare([]byte(storedHash), []byte(apiKeyHash)) == 1 {
+				c.Next()
+				return
+			}
 		}
 		// Fall back to Bearer token (CLI / programmatic access).
-		if c.GetHeader("Authorization") == "Bearer "+apiKey {
-			c.Next()
-			return
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			providedKey := strings.TrimPrefix(authHeader, "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(providedKey), []byte(apiKey)) == 1 {
+				c.Next()
+				return
+			}
 		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 	}
