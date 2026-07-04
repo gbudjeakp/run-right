@@ -3,13 +3,18 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +29,12 @@ type Server struct {
 	db              *sql.DB
 	slackWebhook    string
 	alertWebhookURL string
+	ssoMgr          *ssoManager
+	// SMTP config for email notifications
+	smtpHost string
+	smtpUser string
+	smtpPass string
+	smtpFrom string
 }
 
 // Config holds server configuration.
@@ -34,6 +45,13 @@ type Config struct {
 	DisableAuth     bool
 	SlackWebhook    string // optional; if set, weekly savings digests are posted here
 	AlertWebhookURL string // optional; if set, fired when a job consistently wastes >80% of its machine
+	BaseURL         string // Base URL for SSO callbacks, e.g. https://runright.example.com
+	SSOEnabled      bool   // Enable SSO authentication
+	// SMTP config for email notifications
+	SMTPHost    string // SMTP server host:port, e.g. smtp.example.com:587
+	SMTPUser    string // SMTP username
+	SMTPPass    string // SMTP password
+	SMTPFrom    string // From address, e.g. alerts@runright.io
 }
 
 // New creates a Server, runs migrations, and wires up routes.
@@ -53,7 +71,34 @@ func New(cfg Config) (*Server, error) {
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
 
-	s := &Server{router: r, db: db, slackWebhook: cfg.SlackWebhook, alertWebhookURL: cfg.AlertWebhookURL}
+	s := &Server{
+		router:          r,
+		db:              db,
+		slackWebhook:    cfg.SlackWebhook,
+		alertWebhookURL: cfg.AlertWebhookURL,
+		smtpHost:        cfg.SMTPHost,
+		smtpUser:        cfg.SMTPUser,
+		smtpPass:        cfg.SMTPPass,
+		smtpFrom:        cfg.SMTPFrom,
+	}
+
+	// Initialize SSO manager if enabled
+	if cfg.SSOEnabled && cfg.BaseURL != "" {
+		s.ssoMgr = newSSOManager(db, cfg.BaseURL)
+		if err := s.ssoMgr.Initialize(context.Background()); err != nil {
+			fmt.Printf("warning: SSO initialization failed: %v\n", err)
+		}
+	}
+
+	// SSO endpoints — no auth required for login/callback
+	sso := r.Group("/api/v1/sso")
+	{
+		sso.GET("/providers", s.ssoListProviders)
+		sso.GET("/login/:provider", s.ssoLogin)
+		sso.GET("/callback/:provider", s.ssoCallback)
+		sso.POST("/callback/:provider", s.ssoCallback) // SAML uses POST
+		sso.POST("/logout", s.ssoLogout)
+	}
 
 	// Auth endpoint — no middleware applied here.
 	r.POST("/api/v1/auth", authLogin(cfg.APIKey, cfg.DisableAuth))
@@ -90,6 +135,43 @@ func New(cfg Config) (*Server, error) {
 		v1.GET("/ownership", s.listOwnership)
 		v1.PUT("/ownership", s.upsertOwnership)
 		v1.DELETE("/ownership", s.deleteOwnership)
+		// SSO management (admin only)
+		v1.GET("/sso/me", s.ssoMe)
+		v1.GET("/sso/configs", s.ssoListConfigs)
+		v1.PUT("/sso/configs", s.ssoUpsertConfig)
+		v1.DELETE("/sso/configs", s.ssoDeleteConfig)
+		v1.POST("/sso/configs/test", s.ssoTestConfig)
+
+		// Teams & Organizations
+		v1.GET("/teams", s.listTeams)
+		v1.POST("/teams", s.createTeam)
+		v1.GET("/teams/:teamId", s.getTeam)
+		v1.PUT("/teams/:teamId", s.updateTeam)
+		v1.GET("/teams/:teamId/members", s.listTeamMembers)
+		v1.POST("/teams/:teamId/members/invite", s.inviteTeamMember)
+		v1.PUT("/teams/:teamId/members/:memberId", s.updateTeamMember)
+		v1.DELETE("/teams/:teamId/members/:memberId", s.removeTeamMember)
+
+		// API Keys Management
+		v1.GET("/api-keys", s.listAPIKeys)
+		v1.POST("/api-keys", s.createAPIKey)
+		v1.DELETE("/api-keys/:keyId", s.revokeAPIKey)
+
+		// Audit Logs
+		v1.GET("/audit-logs", s.listAuditLogs)
+		v1.GET("/audit-logs/:logId", s.getAuditLog)
+		v1.GET("/audit-logs/export", s.exportAuditLogs)
+
+		// Analytics & Reporting
+		v1.GET("/analytics/summary", s.getAnalyticsSummary)
+		v1.GET("/analytics/cost-breakdown", s.getCostBreakdown)
+
+		// Scheduled Reports
+		v1.GET("/reports", s.listScheduledReports)
+		v1.POST("/reports", s.createScheduledReport)
+		v1.PUT("/reports/:reportId", s.updateScheduledReport)
+		v1.DELETE("/reports/:reportId", s.deleteScheduledReport)
+		v1.POST("/reports/:reportId/run", s.runReportNow)
 	}
 
 	// Badge endpoint — intentionally unauthenticated for embedding in READMEs.
@@ -167,8 +249,8 @@ func (s *Server) createJob(c *gin.Context) {
 		// "completed" flush overwrites it. A completed record is never
 		// downgraded back to "heartbeat" (WHERE clause guards this).
 		err = s.db.QueryRowContext(c.Request.Context(), `
-			INSERT INTO jobs (job_id, run_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO jobs (job_id, run_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $4)
 			ON CONFLICT (run_id) WHERE run_id IS NOT NULL DO UPDATE SET
 				end_time         = EXCLUDED.end_time,
 				duration_seconds = EXCLUDED.duration_seconds,
@@ -183,8 +265,8 @@ func (s *Server) createJob(c *gin.Context) {
 		).Scan(&id)
 	} else {
 		err = s.db.QueryRowContext(c.Request.Context(),
-			`INSERT INTO jobs (job_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+			`INSERT INTO jobs (job_id, repository, start_time, end_time, duration_seconds, summary, recommendations, status, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $3) RETURNING id`,
 			p.Summary.JobID, repository,
 			p.Summary.StartTime, p.Summary.EndTime, p.Summary.DurationSeconds,
 			summaryJSON, recsJSON, status,
@@ -758,6 +840,9 @@ func (s *Server) getNotificationSettings(c *gin.Context) {
 	if settings.Rules == nil {
 		settings.Rules = []notificationAlertRule{}
 	}
+	if settings.Email.Recipients == nil {
+		settings.Email.Recipients = []string{}
+	}
 
 	secrets, err := s.loadDestinationSecrets(c.Request.Context())
 	if err != nil {
@@ -819,9 +904,17 @@ func (s *Server) upsertNotificationSettings(c *gin.Context) {
 	if settings.Rules == nil {
 		settings.Rules = []notificationAlertRule{}
 	}
+	if settings.Email.Recipients == nil {
+		settings.Email.Recipients = []string{}
+	}
 
-	if settings.Enabled && !settings.Slack.Enabled && !settings.Teams.Enabled && !settings.Webhooks.Enabled {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one destination channel (slack, teams, or webhooks) must be enabled when notifications are enabled"})
+	if settings.Enabled && !settings.Slack.Enabled && !settings.Teams.Enabled && !settings.Webhooks.Enabled && !settings.Email.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one destination channel (slack, teams, webhooks, or email) must be enabled when notifications are enabled"})
+		return
+	}
+
+	if settings.Email.Enabled && len(settings.Email.Recipients) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one email recipient is required when email is enabled"})
 		return
 	}
 
@@ -2039,12 +2132,34 @@ func (s *Server) postWeeklyDigest() {
 
 // --- CORS middleware ---
 
+// allowedOrigins returns the list of allowed origins from env or defaults.
+func allowedOrigins() []string {
+	origins := os.Getenv("RUNRIGHT_ALLOWED_ORIGINS")
+	if origins == "" {
+		// Default: allow localhost for development
+		return []string{"http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"}
+	}
+	return strings.Split(origins, ",")
+}
+
 func corsMiddleware() gin.HandlerFunc {
+	allowed := allowedOrigins()
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		// Check if origin is allowed
+		originAllowed := false
+		for _, o := range allowed {
+			if strings.TrimSpace(o) == origin {
+				originAllowed = true
+				break
+			}
+		}
+		if originAllowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -2058,6 +2173,38 @@ func corsMiddleware() gin.HandlerFunc {
 // --- Auth handlers + middleware ---
 
 const sessionCookie = "runright_session"
+
+// sessionStore maps session tokens to API keys (simple in-memory store).
+// In production, consider using Redis or database-backed sessions.
+var (
+	sessionStore   = make(map[string]string)
+	sessionStoreMu sync.RWMutex
+)
+
+// generateSessionToken creates a cryptographically secure random session token.
+func generateSessionToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// hashAPIKey creates a SHA-256 hash of the API key for session lookup.
+func hashAPIKey(apiKey string) string {
+	h := sha256.Sum256([]byte(apiKey))
+	return hex.EncodeToString(h[:])
+}
+
+// isSecureContext checks if the request is over HTTPS.
+func isSecureContext(c *gin.Context) bool {
+	// Check X-Forwarded-Proto (common behind reverse proxies)
+	if proto := c.GetHeader("X-Forwarded-Proto"); proto == "https" {
+		return true
+	}
+	// Check if TLS connection
+	return c.Request.TLS != nil
+}
 
 // authLogin validates the API key and issues an HttpOnly session cookie.
 func authLogin(apiKey string, disableAuth bool) gin.HandlerFunc {
@@ -2074,20 +2221,42 @@ func authLogin(apiKey string, disableAuth bool) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "api_key required"})
 			return
 		}
-		if body.APIKey != apiKey {
+		// Use constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(body.APIKey), []byte(apiKey)) != 1 {
+			// Add small delay to further mitigate timing attacks
+			time.Sleep(100 * time.Millisecond)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid api_key"})
 			return
 		}
-		// Set HttpOnly, SameSite=Strict cookie. JS cannot read this.
+		// Generate a random session token instead of storing the raw API key
+		sessionToken, err := generateSessionToken()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
+			return
+		}
+		// Store the session token -> API key hash mapping
+		sessionStoreMu.Lock()
+		sessionStore[sessionToken] = hashAPIKey(apiKey)
+		sessionStoreMu.Unlock()
+
+		// Set HttpOnly, SameSite=Strict cookie
+		// Use Secure flag when in HTTPS context
+		secure := isSecureContext(c)
 		c.SetSameSite(http.SameSiteStrictMode)
-		c.SetCookie(sessionCookie, apiKey, 86400*30, "/", "", false, true /* httpOnly */)
+		c.SetCookie(sessionCookie, sessionToken, 86400*30, "/", "", secure, true /* httpOnly */)
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }
 
-// authLogout clears the session cookie.
+// authLogout clears the session cookie and invalidates the session.
 func authLogout() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Invalidate the session token
+		if token, err := c.Cookie(sessionCookie); err == nil {
+			sessionStoreMu.Lock()
+			delete(sessionStore, token)
+			sessionStoreMu.Unlock()
+		}
 		c.SetSameSite(http.SameSiteStrictMode)
 		c.SetCookie(sessionCookie, "", -1, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"status": "logged out"})
@@ -2096,6 +2265,7 @@ func authLogout() gin.HandlerFunc {
 
 // authMiddleware accepts either the HttpOnly cookie or a Bearer token (for CLI/curl).
 func authMiddleware(apiKey string, disableAuth bool) gin.HandlerFunc {
+	apiKeyHash := hashAPIKey(apiKey)
 	return func(c *gin.Context) {
 		// If auth is disabled or no API key is configured, skip auth (dev mode).
 		if disableAuth || apiKey == "" {
@@ -2103,14 +2273,23 @@ func authMiddleware(apiKey string, disableAuth bool) gin.HandlerFunc {
 			return
 		}
 		// Check HttpOnly cookie first (dashboard).
-		if cookie, err := c.Cookie(sessionCookie); err == nil && cookie == apiKey {
-			c.Next()
-			return
+		if token, err := c.Cookie(sessionCookie); err == nil {
+			sessionStoreMu.RLock()
+			storedHash, exists := sessionStore[token]
+			sessionStoreMu.RUnlock()
+			if exists && subtle.ConstantTimeCompare([]byte(storedHash), []byte(apiKeyHash)) == 1 {
+				c.Next()
+				return
+			}
 		}
 		// Fall back to Bearer token (CLI / programmatic access).
-		if c.GetHeader("Authorization") == "Bearer "+apiKey {
-			c.Next()
-			return
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			providedKey := strings.TrimPrefix(authHeader, "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(providedKey), []byte(apiKey)) == 1 {
+				c.Next()
+				return
+			}
 		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 	}
@@ -2131,6 +2310,7 @@ func ConfigFromEnv() Config {
 	if !disableAuth {
 		disableAuth = strings.EqualFold(strings.TrimSpace(os.Getenv("RUNRIGHT_DEV_MODE")), "true")
 	}
+	ssoEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("RUNRIGHT_SSO_ENABLED")), "true")
 	return Config{
 		Port:            port,
 		DSN:             dsn,
@@ -2138,5 +2318,11 @@ func ConfigFromEnv() Config {
 		DisableAuth:     disableAuth,
 		SlackWebhook:    os.Getenv("RUNRIGHT_SLACK_WEBHOOK"),
 		AlertWebhookURL: os.Getenv("RUNRIGHT_ALERT_WEBHOOK"),
+		BaseURL:         os.Getenv("RUNRIGHT_BASE_URL"),
+		SSOEnabled:      ssoEnabled,
+		SMTPHost:        os.Getenv("RUNRIGHT_SMTP_HOST"),
+		SMTPUser:        os.Getenv("RUNRIGHT_SMTP_USER"),
+		SMTPPass:        os.Getenv("RUNRIGHT_SMTP_PASS"),
+		SMTPFrom:        os.Getenv("RUNRIGHT_SMTP_FROM"),
 	}
 }

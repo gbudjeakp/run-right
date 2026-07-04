@@ -5,6 +5,7 @@ import JobDetailPage from './pages/JobDetailPage'
 import JobGroupPage from './pages/JobGroupPage'
 import CatalogPage from './pages/CatalogPage'
 import SettingsPage from './pages/SettingsPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 import PoliciesPage from './pages/PoliciesPage'
 import AlertsPage from './pages/AlertsPage'
 import LoginPage from './pages/LoginPage'
@@ -63,6 +64,7 @@ function AppRoutes() {
         <Route path="jobs/:id" element={<JobDetailPage />} />
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="policies" element={<PoliciesPage />} />
         <Route path="repos" element={<ReposPage />} />
@@ -160,6 +162,15 @@ const AlertsIcon = ({ className }: NavIconProps) => (
   <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M12 4.5a5.5 5.5 0 0 0-5.5 5.5v2.9c0 .6-.2 1.1-.6 1.6L4.5 16h15l-1.4-1.5c-.4-.4-.6-1-.6-1.6V10A5.5 5.5 0 0 0 12 4.5Z"/>
     <path d="M9.7 18a2.3 2.3 0 0 0 4.6 0"/>
+  </svg>
+)
+
+const AnalyticsIcon = ({ className }: NavIconProps) => (
+  <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 3v18h18"/>
+    <path d="M18 17V9"/>
+    <path d="M13 17V5"/>
+    <path d="M8 17v-3"/>
   </svg>
 )
 
@@ -323,6 +334,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
         <SideLink to="/app/catalog" onClick={closeMobile} collapsed={desktopCollapsed} icon={CatalogIcon}>Catalog</SideLink>
         <SideLink to="/app/policies" onClick={closeMobile} collapsed={desktopCollapsed} icon={PolicyIcon}>Policy</SideLink>
         <SideLink to="/app/alerts" onClick={closeMobile} collapsed={desktopCollapsed} icon={AlertsIcon}>Alerts</SideLink>
+        <SideLink to="/app/analytics" onClick={closeMobile} collapsed={desktopCollapsed} icon={AnalyticsIcon}>Analytics</SideLink>
         <SideLink to="/app/settings" onClick={closeMobile} collapsed={desktopCollapsed} icon={SettingsIcon}>Settings</SideLink>
 
         <div className="mt-auto flex flex-col pt-4 border-t border-[var(--sidebar-border)]">

@@ -14,6 +14,7 @@ export default function OwnershipTab({ settings, onError, onNote }: OwnershipTab
   const [newOwnershipRepo, setNewOwnershipRepo] = useState('')
   const [newOwnershipTeam, setNewOwnershipTeam] = useState('')
   const [newOwnershipDestIds, setNewOwnershipDestIds] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Load on first open
   useEffect(() => {
@@ -77,6 +78,20 @@ export default function OwnershipTab({ settings, onError, onNote }: OwnershipTab
     }
   }
 
+  // Filter entries based on search query
+  const filteredEntries = ownershipEntries.filter((entry) => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    return (
+      entry.repository.toLowerCase().includes(q) ||
+      entry.team_name.toLowerCase().includes(q) ||
+      entry.destination_ids.some((id) => {
+        const dest = allDests.find((d) => d.id === id)
+        return dest?.name.toLowerCase().includes(q)
+      })
+    )
+  })
+
   return (
     <div className="rr-card">
       <h2 className="font-serif text-[17px] font-bold text-[var(--text)] mb-1">Repository Ownership</h2>
@@ -85,33 +100,8 @@ export default function OwnershipTab({ settings, onError, onNote }: OwnershipTab
         automatically routes to these destinations in addition to any rule-configured ones.
       </p>
 
-      {ownershipEntries.length > 0 && (
-        <div className="divide-y divide-[var(--border)] border border-[var(--border)] rounded mb-6">
-          {ownershipEntries.map((entry) => (
-            <div key={`${entry.repository}:${entry.team_name}`} className="flex items-start justify-between px-4 py-3 gap-3">
-              <div className="min-w-0">
-                <div className="font-semibold text-sm text-[var(--text)] truncate">{entry.repository}</div>
-                <div className="text-xs text-[var(--text-mid)] mt-0.5">Team: {entry.team_name}</div>
-                <div className="text-xs text-[var(--text-light)] mt-0.5">
-                  {entry.destination_ids.length === 0
-                    ? 'No destinations'
-                    : entry.destination_ids.map((id) => allDests.find((d) => d.id === id)?.name ?? id).join(', ')}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="flex-shrink-0 text-xs font-deco tracking-widest text-[var(--red)] border border-[var(--red)] px-3 py-1 rounded hover:bg-[rgba(194,59,34,.06)]"
-                onClick={() => void handleRemoveOwnership(entry.repository, entry.team_name)}
-                disabled={busy}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <form className="settings-form" onSubmit={(e) => void handleSaveOwnership(e)}>
+      {/* Form at the top */}
+      <form className="settings-form mb-6" onSubmit={(e) => void handleSaveOwnership(e)}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="form-group">
             <label>Repository</label>
@@ -167,6 +157,50 @@ export default function OwnershipTab({ settings, onError, onNote }: OwnershipTab
           Save Ownership Rule
         </button>
       </form>
+
+      {/* Search and entries list */}
+      {ownershipEntries.length > 0 && (
+        <>
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="Search by repository, team, or destination..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded bg-[var(--cream)] text-sm placeholder:text-[var(--text-light)] focus:outline-none focus:border-[var(--gold)]"
+            />
+          </div>
+          <div className="divide-y divide-[var(--border)] border border-[var(--border)] rounded">
+            {filteredEntries.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-[var(--text-light)]">
+                No ownership entries match your search.
+              </div>
+            ) : (
+              filteredEntries.map((entry) => (
+                <div key={`${entry.repository}:${entry.team_name}`} className="flex items-start justify-between px-4 py-3 gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm text-[var(--text)] truncate">{entry.repository}</div>
+                    <div className="text-xs text-[var(--text-mid)] mt-0.5">Team: {entry.team_name}</div>
+                    <div className="text-xs text-[var(--text-light)] mt-0.5">
+                      {entry.destination_ids.length === 0
+                        ? 'No destinations'
+                        : entry.destination_ids.map((id) => allDests.find((d) => d.id === id)?.name ?? id).join(', ')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex-shrink-0 text-xs font-deco tracking-widest text-[var(--red)] border border-[var(--red)] px-3 py-1 rounded hover:bg-[rgba(194,59,34,.06)]"
+                    onClick={() => void handleRemoveOwnership(entry.repository, entry.team_name)}
+                    disabled={busy}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

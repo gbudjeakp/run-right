@@ -88,6 +88,22 @@ func (s *Server) buildNotificationDispatcher(ctx context.Context) (*notification
 		}
 	}
 
+	// Add email destination if enabled with recipients
+	if settings.Email.Enabled && len(settings.Email.Recipients) > 0 {
+		destinations["email"] = notification.Destination{
+			ID:   "email",
+			Name: "Email",
+			Channel: &notification.EmailChannel{
+				SMTPHost:      s.smtpHost,
+				SMTPUser:      s.smtpUser,
+				SMTPPass:      s.smtpPass,
+				FromAddress:   s.smtpFrom,
+				Recipients:    settings.Email.Recipients,
+				SubjectPrefix: settings.Email.SubjectPrefix,
+			},
+		}
+	}
+
 	// Convert server-side rule structs to notification.Rule.
 	rules := make([]notification.Rule, 0, len(settings.Rules))
 	for _, r := range settings.Rules {

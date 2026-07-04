@@ -62,6 +62,13 @@ type Collector struct {
 	baseDiskIO map[string]disk.IOCountersStat
 	prevIOTime time.Time
 	tickCount  int
+
+	// Tier 3 feature: GPU metrics snapshots
+	gpuSnapshots [][]GPUSnapshot
+	// Tier 3 feature: Container metrics snapshots
+	containerSnapshots [][]ContainerMetrics
+	// Tier 3 feature: Cache stats (captured once at end)
+	cacheStats *CacheStats
 }
 
 // NewCollector creates a ready-to-run Collector.
@@ -144,6 +151,10 @@ func (c *Collector) sendHeartbeat() {
 	c.mu.Lock()
 	snaps := make([]types.MetricSnapshot, len(c.snapshots))
 	copy(snaps, c.snapshots)
+	gpuSnaps := make([][]GPUSnapshot, len(c.gpuSnapshots))
+	copy(gpuSnaps, c.gpuSnapshots)
+	containerSnaps := make([][]ContainerMetrics, len(c.containerSnapshots))
+	copy(containerSnaps, c.containerSnapshots)
 	c.mu.Unlock()
 
 	summary := buildSummary(c.cfg.JobID, c.startTime, time.Now(), snaps)
@@ -153,6 +164,21 @@ func (c *Collector) sendHeartbeat() {
 	summary.Repository = detectRepository()
 	applyDetectedMachineMetadata(&summary)
 	summary.RuntimeStorageClass = detectRuntimeStorageClass()
+
+	// Tier 3: Add GPU summary
+	if gpuSummary := buildGPUSummary(gpuSnaps); gpuSummary != nil {
+		summary.GPU = convertGPUSummary(gpuSummary)
+	}
+
+	// Tier 3: Add container summary
+	if containerSummary := buildContainerSummary(containerSnaps); containerSummary != nil {
+		summary.Containers = convertContainerSummary(containerSummary)
+	}
+
+	// Tier 3: Add egress estimate
+	if egressSummary := buildEgressSummary(summary.NetTxMBsPeak, summary.CIPlatform, summary.DurationSeconds, summary.SampleCount); egressSummary != nil {
+		summary.Egress = convertEgressSummary(egressSummary)
+	}
 
 	// Write partial file so OOM-killed jobs still have data for recommendations.
 	if c.cfg.HeartbeatFilePath != "" {
@@ -226,6 +252,20 @@ func (c *Collector) collect(t time.Time) (types.MetricSnapshot, error) {
 			c.baseDiskIO = diskIO
 		}
 		c.prevIOTime = t
+
+		// Tier 3: GPU metrics (sample during expensive probes)
+		if gpuSnaps := collectGPUMetrics(); len(gpuSnaps) > 0 {
+			c.mu.Lock()
+			c.gpuSnapshots = append(c.gpuSnapshots, gpuSnaps)
+			c.mu.Unlock()
+		}
+
+		// Tier 3: Container metrics (sample during expensive probes)
+		if containers, ok := detectContainers(); ok && len(containers) > 0 {
+			c.mu.Lock()
+			c.containerSnapshots = append(c.containerSnapshots, containers)
+			c.mu.Unlock()
+		}
 	}
 
 	return snap, nil
@@ -239,7 +279,14 @@ func (c *Collector) Flush() error {
 	c.mu.Lock()
 	snaps := make([]types.MetricSnapshot, len(c.snapshots))
 	copy(snaps, c.snapshots)
+	gpuSnaps := make([][]GPUSnapshot, len(c.gpuSnapshots))
+	copy(gpuSnaps, c.gpuSnapshots)
+	containerSnaps := make([][]ContainerMetrics, len(c.containerSnapshots))
+	copy(containerSnaps, c.containerSnapshots)
 	c.mu.Unlock()
+
+	// Tier 3: Collect cache stats at the end of the run
+	cacheStats := detectCacheStats()
 
 	if err := os.MkdirAll(c.cfg.OutputDir, 0o755); err != nil {
 		return fmt.Errorf("output dir: %w", err)
@@ -268,6 +315,26 @@ func (c *Collector) Flush() error {
 	summary.Repository = detectRepository()
 	applyDetectedMachineMetadata(&summary)
 	summary.RuntimeStorageClass = detectRuntimeStorageClass()
+
+	// Tier 3: Add GPU summary
+	if gpuSummary := buildGPUSummary(gpuSnaps); gpuSummary != nil {
+		summary.GPU = convertGPUSummary(gpuSummary)
+	}
+
+	// Tier 3: Add container summary
+	if containerSummary := buildContainerSummary(containerSnaps); containerSummary != nil {
+		summary.Containers = convertContainerSummary(containerSummary)
+	}
+
+	// Tier 3: Add cache stats
+	if cacheStats != nil {
+		summary.Cache = convertCacheStats(cacheStats)
+	}
+
+	// Tier 3: Add egress estimate
+	if egressSummary := buildEgressSummary(summary.NetTxMBsPeak, summary.CIPlatform, summary.DurationSeconds, summary.SampleCount); egressSummary != nil {
+		summary.Egress = convertEgressSummary(egressSummary)
+	}
 
 	summaryPath := filepath.Join(c.cfg.OutputDir, "metrics-summary.json")
 	sf, err := os.Create(summaryPath)
@@ -675,4 +742,99 @@ func readCgroupInt64(path string) (int64, error) {
 		return 0, err
 	}
 	return strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+}
+
+// Tier 3: Converter functions to map agent-internal types to types package
+
+// convertGPUSummary converts the agent GPUSummary to types.GPUSummary.
+func convertGPUSummary(src *GPUSummary) *types.GPUSummary {
+	if src == nil {
+		return nil
+	}
+	return &types.GPUSummary{
+		Count:              src.Count,
+		TotalMemoryGiB:     src.TotalMemoryGiB,
+		AvgUtilizationPct:  src.AvgUtilizationPct,
+		PeakUtilizationPct: src.PeakUtilizationPct,
+		P95UtilizationPct:  src.P95UtilizationPct,
+		AvgMemoryUtilPct:   src.AvgMemoryUtilPct,
+		PeakMemoryUtilPct:  src.PeakMemoryUtilPct,
+		P95MemoryUtilPct:   src.P95MemoryUtilPct,
+		AvgPowerDrawW:      src.AvgPowerDrawW,
+		PeakPowerDrawW:     src.PeakPowerDrawW,
+		IdleSamplesPct:     src.IdleSamplesPct,
+		UnderutilizedPct:   src.UnderutilizedPct,
+		GPUType:            src.GPUType,
+	}
+}
+
+// convertContainerSummary converts the agent ContainerSummary to types.ContainerSummary.
+func convertContainerSummary(src *ContainerSummary) *types.ContainerSummary {
+	if src == nil {
+		return nil
+	}
+	containers := make([]types.ContainerAggregates, len(src.Containers))
+	for i, c := range src.Containers {
+		containers[i] = types.ContainerAggregates{
+			ID:                c.ID,
+			Name:              c.Name,
+			Image:             c.Image,
+			CPUPercentAvg:     c.CPUPercentAvg,
+			CPUPercentPeak:    c.CPUPercentPeak,
+			CPUPercentP95:     c.CPUPercentP95,
+			MemoryUsedMiBAvg:  c.MemoryUsedMiBAvg,
+			MemoryUsedMiBPeak: c.MemoryUsedMiBPeak,
+			MemoryLimitMiB:    c.MemoryLimitMiB,
+			NetRxMBTotal:      c.NetRxMBTotal,
+			NetTxMBTotal:      c.NetTxMBTotal,
+			BlockReadMBTotal:  c.BlockReadMBTotal,
+			BlockWriteMBTotal: c.BlockWriteMBTotal,
+			SampleCount:       c.SampleCount,
+		}
+	}
+	return &types.ContainerSummary{
+		Containers:         containers,
+		TotalContainers:    src.TotalContainers,
+		TopCPUContainer:    src.TopCPUContainer,
+		TopMemoryContainer: src.TopMemoryContainer,
+	}
+}
+
+// convertCacheStats converts the agent CacheStats to types.CacheStats.
+func convertCacheStats(src *CacheStats) *types.CacheStats {
+	if src == nil {
+		return nil
+	}
+	return &types.CacheStats{
+		DockerLayerCacheHits:   src.DockerLayerCacheHits,
+		DockerLayerCacheMisses: src.DockerLayerCacheMisses,
+		NPMCacheHitRate:        src.NPMCacheHitRate,
+		PIPCacheHitRate:        src.PIPCacheHitRate,
+		GoCacheHitRate:         src.GoCacheHitRate,
+		MavenCacheHitRate:      src.MavenCacheHitRate,
+		GradleCacheHitRate:     src.GradleCacheHitRate,
+		CIPlatformCacheHit:     src.CIPlatformCacheHit,
+		CIPlatformCacheSize:    src.CIPlatformCacheSize,
+		CacheRestoreTimeMs:     src.CacheRestoreTimeMs,
+		CacheSaveTimeMs:        src.CacheSaveTimeMs,
+		OverallCacheHitRate:    src.OverallCacheHitRate,
+		EstimatedTimeSaved:     src.EstimatedTimeSaved,
+	}
+}
+
+// convertEgressSummary converts the agent EgressSummary to types.EgressSummary.
+func convertEgressSummary(src *EgressSummary) *types.EgressSummary {
+	if src == nil {
+		return nil
+	}
+	return &types.EgressSummary{
+		TotalEgressGB:        src.TotalEgressGB,
+		EstimatedCostUSD:     src.EstimatedCostUSD,
+		CostPerRunUSD:        src.CostPerRunUSD,
+		MonthlyProjectionUSD: src.MonthlyProjectionUSD,
+		Provider:             src.Provider,
+		RecommendCaching:     src.RecommendCaching,
+		RecommendCompression: src.RecommendCompression,
+		PotentialSavingsUSD:  src.PotentialSavingsUSD,
+	}
 }

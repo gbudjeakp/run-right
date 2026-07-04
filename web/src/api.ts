@@ -2,6 +2,7 @@ import axios from 'axios'
 import type {
   Job, MachineType, SavingsSummary, SavingsHistoryPoint, RepoSummary, JobSummaryRow,
   PolicyRule, PolicyEvaluation, NotificationSettings, DeliveryLog, OwnershipEntry,
+  SSOProvider, SSOUser, SSOConfig,
 } from './types'
 
 const api = axios.create({
@@ -143,3 +144,27 @@ export const fetchUserSettings = (): Promise<UserSettings> =>
 
 export const upsertUserSettings = (payload: UserSettings): Promise<void> =>
   api.put('/user-settings', payload).then(() => undefined)
+
+// ── SSO API ─────────────────────────────────────────────────────────────────
+
+export const fetchSSOProviders = (): Promise<SSOProvider[]> =>
+  api.get<{ providers: SSOProvider[] }>('/sso/providers').then((r) => r.data?.providers ?? [])
+
+export const fetchSSOMe = (): Promise<SSOUser> =>
+  api.get<SSOUser>('/sso/me').then((r) => r.data)
+
+export const ssoLogout = (): Promise<void> =>
+  api.post('/sso/logout').then(() => undefined)
+
+// Admin SSO config management
+export const fetchSSOConfigs = (): Promise<SSOConfig[]> =>
+  api.get<{ configs: SSOConfig[] }>('/sso/configs').then((r) => r.data?.configs ?? [])
+
+export const upsertSSOConfig = (payload: Partial<SSOConfig>): Promise<{ id: number }> =>
+  api.put<{ id: number; status: string }>('/sso/configs', payload).then((r) => ({ id: r.data.id }))
+
+export const deleteSSOConfig = (id: number): Promise<void> =>
+  api.delete('/sso/configs', { data: { id } }).then(() => undefined)
+
+export const testSSOConfig = (payload: Partial<SSOConfig>): Promise<{ valid: boolean; message?: string; error?: string }> =>
+  api.post<{ valid: boolean; message?: string; error?: string }>('/sso/configs/test', payload).then((r) => r.data)

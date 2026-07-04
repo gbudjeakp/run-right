@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -31,7 +34,7 @@ the right AWS or GCP machine type so you stop guessing and start saving.`,
 }
 
 func main() {
-	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd, verifyCmd)
+	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd, verifyCmd, updateCmd, setupCmd)
 	cobra.OnInitialize(initConfig)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -504,5 +507,378 @@ func runVerify(_ *cobra.Command, _ []string) error {
 		os.Exit(2)
 	}
 	fmt.Println("\nrunright verify: recommendation validated")
+	return nil
+}
+
+// ── update ────────────────────────────────────────────────────────────────────
+
+var updateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Check for and install updates to runright",
+	Long: `update checks for a newer version of runright and optionally installs it.
+
+Examples:
+  runright update --check          # Check for updates without installing
+  runright update                  # Check and install if available
+  runright update --channel beta   # Check beta channel for updates`,
+	RunE: runUpdate,
+}
+
+var (
+	updateCheck   bool
+	updateChannel string
+	updateForce   bool
+)
+
+func init() {
+	updateCmd.Flags().BoolVar(&updateCheck, "check", false, "Only check for updates, don't install")
+	updateCmd.Flags().StringVar(&updateChannel, "channel", "stable", "Release channel: stable, beta, or nightly")
+	updateCmd.Flags().BoolVar(&updateForce, "force", false, "Force update even if already on latest version")
+}
+
+func runUpdate(_ *cobra.Command, _ []string) error {
+	cfg := agent.UpdateConfig{
+		Enabled:  true,
+		Channel:  updateChannel,
+		GitHubRepo: "gbudjeakp/run-right",
+	}
+
+	fmt.Printf("runright: checking for updates (channel: %s)...\n", updateChannel)
+
+	info, err := agent.CheckForUpdate(cfg)
+	if err != nil {
+		return fmt.Errorf("check update: %w", err)
+	}
+
+	fmt.Printf("Current version: %s\n", info.CurrentVersion)
+	fmt.Printf("Latest version:  %s\n", info.LatestVersion)
+
+	if !info.UpdateAvailable && !updateForce {
+		fmt.Println("runright: already up to date")
+		return nil
+	}
+
+	if updateCheck {
+		if info.UpdateAvailable {
+			fmt.Printf("\nUpdate available: %s -> %s\n", info.CurrentVersion, info.LatestVersion)
+			fmt.Printf("Release notes: %s\n", info.ReleaseURL)
+			if info.DownloadURL != "" {
+				fmt.Printf("Download: %s\n", info.DownloadURL)
+			}
+		}
+		return nil
+	}
+
+	if info.DownloadURL == "" {
+		return fmt.Errorf("no download available for this platform")
+	}
+
+	fmt.Printf("Downloading and installing %s...\n", info.LatestVersion)
+
+	if err := agent.SelfUpdate(cfg); err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	fmt.Println("runright: update complete. Please restart to use the new version.")
+	return nil
+}
+
+// ── setup ─────────────────────────────────────────────────────────────────────
+
+var setupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Interactive setup wizard for RunRight",
+	Long: `setup walks you through configuring RunRight, including SSO providers
+for enterprise authentication.
+
+Examples:
+  runright setup                   # Full interactive setup
+  runright setup --sso             # Configure SSO only
+  runright setup --sso google      # Configure Google SSO
+  runright setup --sso github      # Configure GitHub SSO
+  runright setup --sso okta        # Configure Okta SSO
+  runright setup --sso azuread     # Configure Azure AD SSO`,
+	RunE: runSetup,
+}
+
+var (
+	setupSSO      string
+	setupURL      string
+	setupAPIKey   string
+)
+
+func init() {
+	setupCmd.Flags().StringVar(&setupSSO, "sso", "", "Configure SSO (google, github, okta, azuread, oidc, saml)")
+	setupCmd.Flags().StringVar(&setupURL, "url", "http://localhost:8080", "RunRight server URL")
+	setupCmd.Flags().StringVar(&setupAPIKey, "api-key", "", "API key for authentication (or RUNRIGHT_API_KEY)")
+}
+
+func runSetup(_ *cobra.Command, args []string) error {
+	reader := bufio.NewReader(os.Stdin)
+
+	// Get API key
+	apiKey := setupAPIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("RUNRIGHT_API_KEY")
+	}
+	if apiKey == "" {
+		fmt.Print("Enter your RUNRIGHT_API_KEY: ")
+		input, _ := reader.ReadString('\n')
+		apiKey = strings.TrimSpace(input)
+	}
+	if apiKey == "" {
+		return fmt.Errorf("API key required for setup")
+	}
+
+	// Get server URL
+	serverURL := setupURL
+	if serverURL == "" {
+		serverURL = os.Getenv("RUNRIGHT_URL")
+	}
+	if serverURL == "" {
+		serverURL = "http://localhost:8080"
+	}
+
+	fmt.Println()
+	fmt.Println("╔═══════════════════════════════════════════════════════╗")
+	fmt.Println("║           RunRight Setup Wizard                       ║")
+	fmt.Println("╚═══════════════════════════════════════════════════════╝")
+	fmt.Println()
+
+	// Determine what to configure
+	ssoProvider := setupSSO
+	if len(args) > 0 && ssoProvider == "" {
+		ssoProvider = args[0]
+	}
+
+	if ssoProvider == "" {
+		fmt.Println("What would you like to configure?")
+		fmt.Println()
+		fmt.Println("  [1] SSO (Google, GitHub, Okta, Azure AD, or SAML)")
+		fmt.Println("  [2] Exit")
+		fmt.Println()
+		fmt.Print("Enter choice [1-2]: ")
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+
+		switch choice {
+		case "1", "sso":
+			return setupSSOInteractive(reader, serverURL, apiKey)
+		default:
+			fmt.Println("Setup cancelled.")
+			return nil
+		}
+	}
+
+	return setupSSOProvider(reader, serverURL, apiKey, ssoProvider)
+}
+
+func setupSSOInteractive(reader *bufio.Reader, serverURL, apiKey string) error {
+	fmt.Println()
+	fmt.Println("Select your identity provider:")
+	fmt.Println()
+	fmt.Println("  [1] Google Workspace")
+	fmt.Println("  [2] GitHub")
+	fmt.Println("  [3] Okta")
+	fmt.Println("  [4] Azure AD (Microsoft Entra)")
+	fmt.Println("  [5] Generic OIDC")
+	fmt.Println("  [6] SAML 2.0")
+	fmt.Println()
+	fmt.Print("Enter choice [1-6]: ")
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+
+	providerMap := map[string]string{
+		"1": "google", "2": "github", "3": "okta",
+		"4": "azuread", "5": "oidc", "6": "saml",
+	}
+	provider, ok := providerMap[choice]
+	if !ok {
+		return fmt.Errorf("invalid choice")
+	}
+
+	return setupSSOProvider(reader, serverURL, apiKey, provider)
+}
+
+func setupSSOProvider(reader *bufio.Reader, serverURL, apiKey, provider string) error {
+	fmt.Println()
+	fmt.Printf("Configuring %s SSO...\n", strings.ToUpper(provider))
+	fmt.Println()
+
+	config := map[string]interface{}{
+		"provider_type": provider,
+		"enabled":       true,
+		"default_role":  "viewer",
+	}
+
+	// Provider-specific setup instructions and prompts
+	switch provider {
+	case "google":
+		fmt.Println("Google OAuth Setup:")
+		fmt.Println("  1. Go to https://console.cloud.google.com/apis/credentials")
+		fmt.Println("  2. Create OAuth 2.0 Client ID (Web application)")
+		fmt.Printf("  3. Add redirect URI: %s/api/v1/sso/callback/google\n", serverURL)
+		fmt.Println()
+		config["name"] = "Google"
+		config["scopes"] = "email,profile,openid"
+
+	case "github":
+		fmt.Println("GitHub OAuth Setup:")
+		fmt.Println("  1. Go to https://github.com/settings/developers")
+		fmt.Println("  2. Create a new OAuth App")
+		fmt.Printf("  3. Set callback URL: %s/api/v1/sso/callback/github\n", serverURL)
+		fmt.Println()
+		config["name"] = "GitHub"
+		config["scopes"] = "user:email,read:org"
+
+	case "okta":
+		fmt.Println("Okta OIDC Setup:")
+		fmt.Println("  1. In Okta Admin Console, go to Applications → Create App")
+		fmt.Println("  2. Select OIDC - OpenID Connect, then Web Application")
+		fmt.Printf("  3. Set redirect URI: %s/api/v1/sso/callback/okta\n", serverURL)
+		fmt.Println()
+		config["name"] = "Okta"
+		config["scopes"] = "openid,profile,email"
+
+		fmt.Print("Enter your Okta domain (e.g., yourcompany.okta.com): ")
+		domain, _ := reader.ReadString('\n')
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
+			return fmt.Errorf("Okta domain required")
+		}
+		config["issuer_url"] = fmt.Sprintf("https://%s", domain)
+
+	case "azuread":
+		fmt.Println("Azure AD Setup:")
+		fmt.Println("  1. Go to Azure Portal → Azure Active Directory → App registrations")
+		fmt.Println("  2. Create a new registration")
+		fmt.Printf("  3. Add redirect URI: %s/api/v1/sso/callback/azuread\n", serverURL)
+		fmt.Println()
+		config["name"] = "Azure AD"
+		config["scopes"] = "openid,profile,email"
+
+	case "oidc":
+		fmt.Println("Generic OIDC Setup:")
+		fmt.Printf("Redirect URI for your IdP: %s/api/v1/sso/callback/oidc\n", serverURL)
+		fmt.Println()
+
+		fmt.Print("Enter display name: ")
+		name, _ := reader.ReadString('\n')
+		config["name"] = strings.TrimSpace(name)
+
+		fmt.Print("Enter OIDC issuer URL (e.g., https://idp.example.com): ")
+		issuer, _ := reader.ReadString('\n')
+		config["issuer_url"] = strings.TrimSpace(issuer)
+		config["scopes"] = "openid,profile,email"
+
+	case "saml":
+		fmt.Println("SAML 2.0 Setup:")
+		fmt.Printf("ACS URL: %s/api/v1/sso/callback/saml\n", serverURL)
+		fmt.Printf("Entity ID: %s\n", serverURL)
+		fmt.Println()
+		fmt.Println("Note: SAML requires X.509 certificates. Set RUNRIGHT_SAML_CERT and")
+		fmt.Println("RUNRIGHT_SAML_KEY environment variables on the server.")
+		fmt.Println()
+
+		fmt.Print("Enter display name: ")
+		name, _ := reader.ReadString('\n')
+		config["name"] = strings.TrimSpace(name)
+
+		fmt.Print("Enter IDP metadata URL: ")
+		metadataURL, _ := reader.ReadString('\n')
+		config["idp_metadata_url"] = strings.TrimSpace(metadataURL)
+		config["sp_entity_id"] = serverURL
+
+		// SAML doesn't use client_id/client_secret
+		config["client_id"] = "saml"
+		config["client_secret"] = "saml"
+
+		return saveAndEnableSSO(serverURL, apiKey, config)
+	}
+
+	// Common OAuth prompts
+	fmt.Println()
+	fmt.Print("Enter Client ID: ")
+	clientID, _ := reader.ReadString('\n')
+	config["client_id"] = strings.TrimSpace(clientID)
+
+	fmt.Print("Enter Client Secret: ")
+	clientSecret, _ := reader.ReadString('\n')
+	config["client_secret"] = strings.TrimSpace(clientSecret)
+
+	// Optional: allowed domains
+	fmt.Println()
+	fmt.Print("Restrict to email domains? (comma-separated, or leave blank for all): ")
+	domains, _ := reader.ReadString('\n')
+	domains = strings.TrimSpace(domains)
+	if domains != "" {
+		config["allowed_domains"] = domains
+	}
+
+	return saveAndEnableSSO(serverURL, apiKey, config)
+}
+
+func saveAndEnableSSO(serverURL, apiKey string, config map[string]interface{}) error {
+	fmt.Println()
+	fmt.Println("Saving SSO configuration...")
+
+	// Create HTTP client and make request
+	body, _ := json.Marshal(config)
+	req, err := http.NewRequest("PUT", serverURL+"/api/v1/sso/configs", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cookie", fmt.Sprintf("runright_session=%s", apiKey))
+
+	// First, authenticate with API key to get session
+	authBody, _ := json.Marshal(map[string]string{"api_key": apiKey})
+	authReq, _ := http.NewRequest("POST", serverURL+"/api/v1/auth", bytes.NewReader(authBody))
+	authReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	authResp, err := client.Do(authReq)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+	authResp.Body.Close()
+
+	if authResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("authentication failed: invalid API key")
+	}
+
+	// Get session cookie
+	var sessionCookie string
+	for _, cookie := range authResp.Cookies() {
+		if cookie.Name == "runright_session" {
+			sessionCookie = cookie.Value
+			break
+		}
+	}
+
+	// Now save the SSO config
+	req.Header.Set("Cookie", fmt.Sprintf("runright_session=%s", sessionCookie))
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("failed to save SSO config (status %d)", resp.StatusCode)
+	}
+
+	fmt.Println()
+	fmt.Println("╔═══════════════════════════════════════════════════════╗")
+	fmt.Println("║           SSO Configuration Complete!                 ║")
+	fmt.Println("╚═══════════════════════════════════════════════════════╝")
+	fmt.Println()
+	fmt.Printf("Provider: %s\n", config["provider_type"])
+	fmt.Printf("Name: %s\n", config["name"])
+	fmt.Printf("Status: Enabled\n")
+	fmt.Println()
+	fmt.Println("Users can now sign in with SSO at your RunRight login page.")
+	fmt.Println()
+
 	return nil
 }

@@ -91,6 +91,90 @@ type MetricsSummary struct {
 	NetTxMBsPeak     float64 `json:"net_tx_mbs_peak"`
 
 	SampleCount int `json:"sample_count"`
+
+	// GPU metrics (Tier 3 feature)
+	GPU *GPUSummary `json:"gpu,omitempty"`
+
+	// Container-level breakdown (Tier 3 feature)
+	Containers *ContainerSummary `json:"containers,omitempty"`
+
+	// Build cache efficiency (Tier 3 feature)
+	Cache *CacheStats `json:"cache,omitempty"`
+
+	// Network egress cost estimation (Tier 3 feature)
+	Egress *EgressSummary `json:"egress,omitempty"`
+}
+
+// GPUSummary aggregates GPU metrics across a run.
+type GPUSummary struct {
+	Count                 int     `json:"count"`
+	TotalMemoryGiB        float64 `json:"total_memory_gib"`
+	AvgUtilizationPct     float64 `json:"avg_utilization_pct"`
+	PeakUtilizationPct    float64 `json:"peak_utilization_pct"`
+	P95UtilizationPct     float64 `json:"p95_utilization_pct"`
+	AvgMemoryUtilPct      float64 `json:"avg_memory_util_pct"`
+	PeakMemoryUtilPct     float64 `json:"peak_memory_util_pct"`
+	P95MemoryUtilPct      float64 `json:"p95_memory_util_pct"`
+	AvgPowerDrawW         float64 `json:"avg_power_draw_w"`
+	PeakPowerDrawW        float64 `json:"peak_power_draw_w"`
+	IdleSamplesPct        float64 `json:"idle_samples_pct"`
+	UnderutilizedPct      float64 `json:"underutilized_pct"`
+	GPUType               string  `json:"gpu_type,omitempty"`
+}
+
+// ContainerSummary aggregates container metrics across a run.
+type ContainerSummary struct {
+	Containers         []ContainerAggregates `json:"containers"`
+	TotalContainers    int                   `json:"total_containers"`
+	TopCPUContainer    string                `json:"top_cpu_container,omitempty"`
+	TopMemoryContainer string                `json:"top_memory_container,omitempty"`
+}
+
+// ContainerAggregates holds aggregated metrics for a single container.
+type ContainerAggregates struct {
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Image             string  `json:"image,omitempty"`
+	CPUPercentAvg     float64 `json:"cpu_percent_avg"`
+	CPUPercentPeak    float64 `json:"cpu_percent_peak"`
+	CPUPercentP95     float64 `json:"cpu_percent_p95"`
+	MemoryUsedMiBAvg  float64 `json:"memory_used_mib_avg"`
+	MemoryUsedMiBPeak float64 `json:"memory_used_mib_peak"`
+	MemoryLimitMiB    float64 `json:"memory_limit_mib,omitempty"`
+	NetRxMBTotal      float64 `json:"net_rx_mb_total"`
+	NetTxMBTotal      float64 `json:"net_tx_mb_total"`
+	BlockReadMBTotal  float64 `json:"block_read_mb_total"`
+	BlockWriteMBTotal float64 `json:"block_write_mb_total"`
+	SampleCount       int     `json:"sample_count"`
+}
+
+// CacheStats captures build cache efficiency metrics.
+type CacheStats struct {
+	DockerLayerCacheHits   int     `json:"docker_layer_cache_hits,omitempty"`
+	DockerLayerCacheMisses int     `json:"docker_layer_cache_misses,omitempty"`
+	NPMCacheHitRate        float64 `json:"npm_cache_hit_rate,omitempty"`
+	PIPCacheHitRate        float64 `json:"pip_cache_hit_rate,omitempty"`
+	GoCacheHitRate         float64 `json:"go_cache_hit_rate,omitempty"`
+	MavenCacheHitRate      float64 `json:"maven_cache_hit_rate,omitempty"`
+	GradleCacheHitRate     float64 `json:"gradle_cache_hit_rate,omitempty"`
+	CIPlatformCacheHit     bool    `json:"ci_platform_cache_hit,omitempty"`
+	CIPlatformCacheSize    int64   `json:"ci_platform_cache_size_bytes,omitempty"`
+	CacheRestoreTimeMs     int64   `json:"cache_restore_time_ms,omitempty"`
+	CacheSaveTimeMs        int64   `json:"cache_save_time_ms,omitempty"`
+	OverallCacheHitRate    float64 `json:"overall_cache_hit_rate,omitempty"`
+	EstimatedTimeSaved     float64 `json:"estimated_time_saved_sec,omitempty"`
+}
+
+// EgressSummary provides run-level egress cost analysis.
+type EgressSummary struct {
+	TotalEgressGB        float64 `json:"total_egress_gb"`
+	EstimatedCostUSD     float64 `json:"estimated_cost_usd"`
+	CostPerRunUSD        float64 `json:"cost_per_run_usd"`
+	MonthlyProjectionUSD float64 `json:"monthly_projection_usd,omitempty"`
+	Provider             string  `json:"provider"`
+	RecommendCaching     bool    `json:"recommend_caching,omitempty"`
+	RecommendCompression bool    `json:"recommend_compression,omitempty"`
+	PotentialSavingsUSD  float64 `json:"potential_savings_usd,omitempty"`
 }
 
 // RecommendationTier describes how a recommended machine compares to current usage.
