@@ -25,14 +25,7 @@ Grafana, Datadog, and Sentry tell you how your application behaves. They do not 
 
 ## In action
 
-<p align="center"><sub>Live product tour: dashboard, run insights, recommendations, and job history</sub></p>
-
-![RunRight UI carousel: jobs, run detail, recommendations, and history](.github/screenshots/readme-carousel.gif)
-
-<p align="center"><sub>Pipe your data into Grafana, Datadog, or any metrics tool. Raw runs land in Postgres.</sub></p>
-<p align="center">
-  <img src=".github/screenshots/ss-06.png" width="98%" alt="Grafana dashboard: CI compute sizes" />
-</p>
+See [runright-platform](https://github.com/gbudjeakp/runright-platform) for a live product tour of the self-hosted dashboard.
 
 ---
 
@@ -54,20 +47,7 @@ curl -fsSL \
     run: make build
 ```
 
-**Docker Compose** — self-hosted dashboard + API + Postgres:
-
-```bash
-export RUNRIGHT_API_KEY=$(openssl rand -hex 32)
-docker compose up -d
-```
-
-| Service | URL |
-|---------|-----|
-| Dashboard | http://localhost:3000 |
-| API | http://localhost:8080 |
-| PostgreSQL | localhost:5435 |
-
-**Already using Datadog, Grafana Cloud, New Relic, or any OTLP tool?** Skip the backend entirely — point RunRight at your existing collector:
+**Already using Datadog, Grafana Cloud, New Relic, or any OTLP tool?** Point RunRight at your existing collector:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector:4317 \
@@ -135,18 +115,6 @@ Catalog: **160+ AWS** and **60+ GCP** instance types, matched at p95 CPU + memor
 
 ---
 
-## Grafana
-
-A pre-built dashboard is included in `grafana/`. Mount it with Docker Compose and it auto-provisions against your RunRight PostgreSQL:
-
-```bash
-cd grafana && docker compose up -d
-# Dashboard at http://localhost:3001  (admin / runright)
-```
-
-Panels: jobs/day · avg CPU p95 by job · CI platform breakdown · cost savings potential · recent runs table · CPU trend by CI platform.
-
----
 
 ## CLI
 
@@ -154,7 +122,6 @@ Panels: jobs/day · avg CPU p95 by job · CI platform breakdown · cost savings 
 runright monitor   [--duration D] [--interval I] [--export file,http,otlp,prometheus] [--job-id ID] [--http-url URL]
 runright recommend [--metrics FILE] [--provider aws|gcp] [--format table|json]
 runright catalog list [--provider aws|gcp] [--family NAME] [--arch x86_64|arm64]
-runright serve     [--port 8080]
 ```
 
 ---
@@ -166,26 +133,9 @@ make build              # local binary
 make build-linux        # linux/amd64 + linux/arm64
 make build-all          # all 5 platforms
 go test ./internal/...
-cd web && pnpm dev
 ```
 
-### Backend Hot Reload (Docker)
-
-Use the dev profile to run the backend with live reload via Air:
-
-```bash
-docker compose up -d postgres dashboard
-docker compose --profile dev up -d backend-dev
-```
-
-Now backend code changes reload automatically. You do not need `docker compose down` each time.
-
-If `backend` is already running, stop only that service first:
-
-```bash
-docker compose stop backend
-docker compose rm -f backend
-```
+For the self-hosted dashboard and API, see [runright-platform](https://github.com/gbudjeakp/runright-platform).
 
 ---
 
