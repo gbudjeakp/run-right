@@ -65,16 +65,88 @@ runright monitor --export prometheus --prometheus-port 9090
 ## Add to CI
 
 **GitHub Actions**
+
+Two usage modes:
+
+**Wrapper mode** (simplest) — wraps a single command:
 ```yaml
 - uses: gbudjeakp/run-right@v1
   with:
     run: make build
-    export: otlp                            # or file,http for self-hosted
-  env:
-    OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_ENDPOINT }}   # Datadog, Grafana Cloud, etc.
-    # RUNRIGHT_URL: ${{ vars.RUNRIGHT_URL }}  # self-hosted only
-    # RUNRIGHT_API_KEY: ${{ secrets.RUNRIGHT_API_KEY }}
 ```
+
+**Standalone mode** — monitors across multiple steps:
+```yaml
+- uses: gbudjeakp/run-right@v1
+  with:
+    step: start
+
+- run: make build
+- run: make test
+
+- uses: gbudjeakp/run-right@v1
+  with:
+    step: stop
+```
+
+**Send to an OTLP collector** (Datadog, Grafana Cloud, New Relic, etc.):
+```yaml
+- uses: gbudjeakp/run-right@v1
+  with:
+    run: make build
+    export: otlp
+  env:
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_ENDPOINT }}
+    OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Bearer ${{ secrets.OTEL_TOKEN }}"
+```
+
+**Send to self-hosted RunRight Platform:**
+```yaml
+- uses: gbudjeakp/run-right@v1
+  with:
+    run: make build
+    export: http
+    http-url: ${{ vars.RUNRIGHT_URL }}
+  env:
+    RUNRIGHT_API_KEY: ${{ secrets.RUNRIGHT_API_KEY }}
+```
+
+**Use step outputs** (e.g. in a subsequent step or job):
+```yaml
+- uses: gbudjeakp/run-right@v1
+  id: rr
+  with:
+    run: make build
+
+- run: echo "Suggested machine: ${{ steps.rr.outputs.suggested-machine }}"
+```
+
+### Action inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `run` | — | Command to wrap *(wrapper mode)* |
+| `step` | — | `start` or `stop` *(standalone mode)* |
+| `export` | `file` | Export backends: `file`, `otlp`, `http`, `prometheus` (comma-separated) |
+| `interval` | `5s` | Metrics sampling interval |
+| `duration` | `0` (unlimited) | Max monitoring duration, e.g. `30m` |
+| `job-id` | `${{ github.job }}` | Unique identifier for this run |
+| `output-dir` | `.runright/` | Directory to write metrics files |
+| `http-url` | — | RunRight Platform URL for `http` export |
+| `upload-artifact` | `true` | Upload metrics files as a GitHub Artifact |
+| `pr-comment` | `true` | Post recommendation as a PR comment |
+| `github-token` | `${{ github.token }}` | Token used to post PR comments |
+| `provider` | *(all)* | Filter recommendations: `aws`, `gcp`, or `github` |
+| `version` | `latest` | RunRight binary version to download |
+
+### Action outputs
+
+| Output | Description |
+|--------|-------------|
+| `recommendation-json` | Full JSON array of machine recommendations |
+| `suggested-machine` | Top recommended machine ID (e.g. `t3.medium`) |
+| `detected-machine` | Machine type detected at runtime |
+| `artifact-url` | URL of the uploaded metrics artifact |
 
 **Jenkins**
 ```groovy
