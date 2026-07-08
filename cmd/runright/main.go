@@ -22,7 +22,6 @@ import (
 	"github.com/sgbudje/runright/internal/catalog"
 	"github.com/sgbudje/runright/internal/engine"
 	"github.com/sgbudje/runright/internal/exporter"
-	"github.com/sgbudje/runright/internal/server"
 	"github.com/sgbudje/runright/internal/types"
 )
 
@@ -34,7 +33,7 @@ the right AWS or GCP machine type so you stop guessing and start saving.`,
 }
 
 func main() {
-	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, serveCmd, verifyCmd, updateCmd, setupCmd)
+	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, verifyCmd, updateCmd, setupCmd)
 	cobra.OnInitialize(initConfig)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -392,30 +391,6 @@ func runCatalogList(_ *cobra.Command, _ []string) error {
 			m.ID, m.Provider, m.Family, m.VCPUs, m.MemoryGiB, m.Architecture, m.OnDemandPricePerHour)
 	}
 	return w.Flush()
-}
-
-// ── serve ─────────────────────────────────────────────────────────────────────
-
-var serveCmd = &cobra.Command{
-	Use:   "serve",
-	Short: "Start the RunRight dashboard backend",
-	RunE:  runServe,
-}
-
-var servePort int
-
-func init() {
-	serveCmd.Flags().IntVar(&servePort, "port", 8080, "HTTP port")
-}
-
-func runServe(_ *cobra.Command, _ []string) error {
-	cfg := server.ConfigFromEnv()
-	cfg.Port = servePort
-	srv, err := server.New(cfg)
-	if err != nil {
-		return fmt.Errorf("server init: %w", err)
-	}
-	return srv.Run(servePort)
 }
 
 // ── verify ────────────────────────────────────────────────────────────────────

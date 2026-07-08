@@ -315,12 +315,12 @@ func (m *Manager) postTeams(ctx context.Context, summary types.MetricsSummary, r
 	monthlyDelta := best.CurrentMonthly - best.EstimatedMonthly
 
 	// Teams Incoming Webhook payload (simple MessageCard format — universally supported).
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"@type":      "MessageCard",
 		"@context":   "http://schema.org/extensions",
 		"themeColor": "0078D4",
 		"summary":    fmt.Sprintf("RunRight: %s can save ~$%.2f/mo", summary.JobID, monthlyDelta),
-		"sections": []map[string]interface{}{
+		"sections": []map[string]any{
 			{
 				"activityTitle":    fmt.Sprintf("RunRight - `%s`", summary.JobID),
 				"activitySubtitle": fmt.Sprintf("Current: **%s** to Recommended: **%s**", currentID, best.Machine.ID),

@@ -10,7 +10,7 @@ PLATFORMS := \
 	windows/amd64
 
 .PHONY: build build-all build-linux build-linux-amd64 build-linux-arm64 \
-	test lint clean run-server docker-up docker-down catalog-update seed deploy bench-agent
+	test lint clean monitor-test recommend-test catalog-list catalog-update-aws catalog-update-gcp tidy bench-agent
 
 build:
 	go build $(BUILD_FLAGS) -o bin/$(BINARY) $(CMD_DIR)
@@ -44,10 +44,6 @@ lint:
 clean:
 	rm -rf bin/
 
-run-server: build
-	DATABASE_URL="postgres://runright:runright@localhost:5435/runright?sslmode=disable" \
-	  ./bin/$(BINARY) serve --port 8080
-
 monitor-test: build
 	./bin/$(BINARY) monitor --duration 30s --interval 2s --export file --output-dir /tmp/runright-test
 
@@ -57,18 +53,6 @@ recommend-test: build
 catalog-list: build
 	./bin/$(BINARY) catalog list
 
-seed:
-	go run ./cmd/seed/ --url http://localhost:8080
-
-# Deploy the React frontend to runright.dev
-# Usage: make deploy   (re-builds and uploads to VPS)
-VPS_HOST := root@2.24.203.35
-VPS_DIR  := /var/www/runright
-
-deploy:
-	cd web && pnpm build
-	rsync -avz --delete web/dist/ $(VPS_HOST):$(VPS_DIR)/
-
 catalog-update-aws: build
 	go run ./catalog/updater/aws/... --output catalog/data/aws.json
 	cp catalog/data/aws.json internal/catalog/data/aws.json
@@ -76,18 +60,6 @@ catalog-update-aws: build
 catalog-update-gcp: build
 	go run ./catalog/updater/gcp/... --output catalog/data/gcp.json
 	cp catalog/data/gcp.json internal/catalog/data/gcp.json
-
-docker-up:
-	docker compose up --build -d
-
-docker-down:
-	docker compose down
-
-web-dev:
-	cd web && pnpm install && pnpm dev
-
-web-build:
-	cd web && pnpm install && pnpm build
 
 tidy:
 	go mod tidy
