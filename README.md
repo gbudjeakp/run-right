@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="web/public/favicon.svg" width="72" height="72" alt="RunRight logo" />
-</p>
-
 <h1 align="center">RunRight</h1>
 
 <p align="center"><strong>Right-size your CI machines.</strong> RunRight runs alongside every CI job, samples CPU/memory/disk/threads, and recommends the cheapest AWS or GCP instance that still fits your workload.</p>
