@@ -20,6 +20,7 @@ coverage.txt
 vendor/
 
 # Frontend
+node_modules/
 web/node_modules/
 web/dist/
 web/.pnpm-store/

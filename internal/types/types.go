@@ -223,3 +223,98 @@ type UserSettings struct {
 	AllowedSeries     []string `json:"allowed_series"`
 	AllowedFamilies   []string `json:"allowed_families"`
 }
+
+// ─── AI Assistant Types ─────────────────────────────────────────────────────
+
+// Conversation represents a chat conversation with the AI assistant.
+type Conversation struct {
+	ID             string    `json:"id"`
+	Title          string    `json:"title"`
+	UserID         string    `json:"user_id,omitempty"`
+	Summary        string    `json:"summary,omitempty"`        // compacted memory of older messages
+	MessageCount   int       `json:"message_count,omitempty"` // total stored messages
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// ChatMessage represents a single message in a conversation.
+type ChatMessage struct {
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversation_id"`
+	Role           string    `json:"role"` // "user" | "assistant" | "system"
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"created_at"`
+	// Metadata stores additional info like data sources used, cost of API call, etc.
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// ChatRequest is the payload for sending a message to the assistant.
+type ChatRequest struct {
+	ConversationID string `json:"conversation_id,omitempty"` // empty = new conversation
+	Message        string `json:"message"`
+	// Context filters to scope the assistant's data access
+	Repository string `json:"repository,omitempty"`
+	JobID      string `json:"job_id,omitempty"`
+}
+
+// ChatResponse is the assistant's reply.
+type ChatResponse struct {
+	ConversationID string       `json:"conversation_id"`
+	Message        ChatMessage  `json:"message"`
+	DataSources    []DataSource `json:"data_sources,omitempty"` // what data was used to answer
+}
+
+// DataSource describes data the assistant accessed to answer a question.
+type DataSource struct {
+	Type        string `json:"type"`        // "jobs", "savings", "policies", "catalog", etc.
+	Description string `json:"description"` // human-readable description
+	Count       int    `json:"count,omitempty"`
+}
+
+// AssistantContext aggregates all data the assistant can access.
+type AssistantContext struct {
+	Jobs            []MetricsSummary             `json:"jobs,omitempty"`
+	Recommendations map[string][]Recommendation  `json:"recommendations,omitempty"` // job_id -> recommendations
+	Savings         *SavingsSnapshot             `json:"savings,omitempty"`
+	Policies        []PolicyRule                 `json:"policies,omitempty"`
+	Repositories    []string                     `json:"repositories,omitempty"`
+	SemanticContext string                       `json:"semantic_context,omitempty"` // RAG: relevant job text from semantic search
+}
+
+// SavingsSnapshot captures current savings state for the assistant.
+type SavingsSnapshot struct {
+	TotalPotentialSavingsUSD float64 `json:"total_potential_savings_usd"`
+	TotalCurrentCostUSD      float64 `json:"total_current_cost_usd"`
+	SavingsPercent           float64 `json:"savings_percent"`
+	TopSavingsOpportunities  []SavingsOpportunity `json:"top_savings_opportunities,omitempty"`
+}
+
+// SavingsOpportunity represents a single cost-saving opportunity.
+type SavingsOpportunity struct {
+	JobID            string  `json:"job_id"`
+	Repository       string  `json:"repository,omitempty"`
+	CurrentCostUSD   float64 `json:"current_cost_usd"`
+	RecommendedCostUSD float64 `json:"recommended_cost_usd"`
+	SavingsUSD       float64 `json:"savings_usd"`
+	SavingsPercent   float64 `json:"savings_percent"`
+	RecommendedMachine string `json:"recommended_machine"`
+}
+
+// EmbeddingSearchResult represents a semantic search result from RAG.
+type EmbeddingSearchResult struct {
+	JobID        string    `json:"job_id"`
+	Repository   string    `json:"repository"`
+	EmbeddedText string    `json:"embedded_text"`
+	MachineType  string    `json:"machine_type,omitempty"`
+	CostUSD      float64   `json:"cost_usd"`
+	StartTime    time.Time `json:"start_time"`
+	Similarity   float64   `json:"similarity"` // 0-1, higher is more similar
+}
+
+// PolicyRule represents a cost policy (re-exported for assistant context).
+type PolicyRule struct {
+	Repository     string  `json:"repository"`
+	JobID          string  `json:"job_id,omitempty"`
+	MaxCostPerHour float64 `json:"max_cost_per_hour"`
+	Enabled        bool    `json:"enabled"`
+}
