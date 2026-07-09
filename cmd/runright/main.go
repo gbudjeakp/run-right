@@ -10,11 +10,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -25,15 +27,42 @@ import (
 	"github.com/sgbudje/runright/internal/types"
 )
 
+// Version is set at build time
+var Version = "dev"
+
+// Global output flags
+var (
+	quietMode   bool
+	oneLiner    bool
+	noColor     bool
+	jsonOutput  bool
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "runright",
 	Short: "Compute sizing tool for CI/CD workloads",
 	Long: `runright monitors your CI job's resource usage and recommends
-the right AWS or GCP machine type so you stop guessing and start saving.`,
+the right AWS, GCP, or Azure machine type so you stop guessing and start saving.`,
+	Version: Version,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if noColor {
+			color.NoColor = true
+		}
+	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVarP(&quietMode, "quiet", "q", false, "Suppress non-essential output")
+	rootCmd.PersistentFlags().BoolVar(&oneLiner, "one-liner", false, "Output only the top recommended machine ID")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 }
 
 func main() {
-	rootCmd.AddCommand(monitorCmd, recommendCmd, catalogCmd, verifyCmd, updateCmd, setupCmd)
+	rootCmd.AddCommand(
+		monitorCmd, recommendCmd, catalogCmd, verifyCmd, updateCmd, setupCmd,
+		initCmd, historyCmd, diffCmd, doctorCmd, explainCmd, completionCmd,
+	)
 	cobra.OnInitialize(initConfig)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -80,6 +109,12 @@ var (
 	monitorAllowedMachineIDs    string
 	monitorAllowedSeries        string
 	monitorAllowedFamilies      string
+	// Exit code policies
+	monitorFailIfOversized      float64
+	monitorMaxCostPerHour       float64
+	monitorAlertIfOver          float64
+	// History
+	monitorRecordHistory        bool
 )
 
 func init() {
@@ -97,6 +132,12 @@ func init() {
 	monitorCmd.Flags().StringVar(&monitorAllowedMachineIDs, "allowed-machine-ids", "", "Comma-separated machine allow-list (or RUNRIGHT_ALLOWED_MACHINE_IDS)")
 	monitorCmd.Flags().StringVar(&monitorAllowedSeries, "allowed-series", "", "Comma-separated series allow-list, e.g. c7g,m7i,n2,e2 (or RUNRIGHT_ALLOWED_SERIES)")
 	monitorCmd.Flags().StringVar(&monitorAllowedFamilies, "allowed-families", "", "Comma-separated family prefixes, e.g. c,m,r,n,e (or RUNRIGHT_ALLOWED_FAMILIES)")
+	// Exit code policies
+	monitorCmd.Flags().Float64Var(&monitorFailIfOversized, "fail-if-oversized", 0, "Exit non-zero if wasting more than N%% (e.g., 50 for 50%%)")
+	monitorCmd.Flags().Float64Var(&monitorMaxCostPerHour, "max-cost-per-hour", 0, "Exit non-zero if recommended machine costs more than $N/hr")
+	monitorCmd.Flags().Float64Var(&monitorAlertIfOver, "alert-if-over", 0, "Print warning if monthly cost exceeds $N")
+	// History
+	monitorCmd.Flags().BoolVar(&monitorRecordHistory, "record-history", true, "Record run in local history database")
 }
 
 func runMonitor(_ *cobra.Command, _ []string) error {
@@ -157,6 +198,19 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 			// the backend always has an up-to-date record for this run.
 			machines := catalog.Query(catalog.QueryOptions{})
 			recs := engine.Recommend(summary, machines)
+
+			// Record to history on completion
+			if summary.Status == "completed" && monitorRecordHistory {
+				if db, err := agent.OpenHistory(""); err == nil {
+					var topRec *types.Recommendation
+					if len(recs) > 0 {
+						topRec = &recs[0]
+					}
+					_ = db.RecordRun(summary, topRec)
+					db.Close()
+				}
+			}
+
 			if monitorDryRun && summary.Status == "completed" {
 				return runDryRun(summary, recs)
 			}
@@ -164,21 +218,63 @@ func runMonitor(_ *cobra.Command, _ []string) error {
 		},
 	})
 
-	fmt.Printf("runright: monitoring started (interval=%s, export=%s)\n", monitorInterval, monitorExport)
+	if !quietMode {
+		fmt.Printf("runright: monitoring started (interval=%s, export=%s)\n", monitorInterval, monitorExport)
+	}
 	return col.Run(ctx)
 }
 
 // runDryRun prints the recommendation table and exits non-zero if the machine is
 // not right-sized. It is used when --dry-run is set.
 func runDryRun(summary types.MetricsSummary, recs []types.Recommendation) error {
-	printTable(recs, summary)
+	if !quietMode {
+		printTable(recs, summary)
+	}
+
+	// One-liner mode: just print the top recommendation
+	if oneLiner && len(recs) > 0 {
+		fmt.Println(recs[0].Machine.ID)
+		return nil
+	}
+
+	// Exit code policies
+	if len(recs) > 0 {
+		top := recs[0]
+
+		// Check fail-if-oversized policy
+		if monitorFailIfOversized > 0 && top.CostDeltaPercent < -monitorFailIfOversized {
+			fmt.Fprintf(os.Stderr, "\nrunright: POLICY VIOLATION - wasting %.0f%% (threshold: %.0f%%)\n",
+				-top.CostDeltaPercent, monitorFailIfOversized)
+			fmt.Fprintf(os.Stderr, "Recommended: %s (saves $%.2f/month)\n",
+				top.Machine.ID, top.CurrentMonthly-top.EstimatedMonthly)
+			os.Exit(2)
+		}
+
+		// Check max-cost-per-hour policy
+		if monitorMaxCostPerHour > 0 && top.Machine.OnDemandPricePerHour > monitorMaxCostPerHour {
+			fmt.Fprintf(os.Stderr, "\nrunright: POLICY VIOLATION - recommended machine costs $%.4f/hr (max: $%.4f/hr)\n",
+				top.Machine.OnDemandPricePerHour, monitorMaxCostPerHour)
+			os.Exit(2)
+		}
+
+		// Check alert-if-over (warning only, no exit)
+		if monitorAlertIfOver > 0 && top.EstimatedMonthly > monitorAlertIfOver {
+			fmt.Fprintf(os.Stderr, "\n⚠️  WARNING: Monthly cost ($%.2f) exceeds threshold ($%.2f)\n",
+				top.EstimatedMonthly, monitorAlertIfOver)
+		}
+	}
+
 	for _, r := range recs {
 		if r.Tier != "right-sized" {
-			fmt.Fprintf(os.Stderr, "\nrunright: machine is %s — change instance type to cut costs\n", recs[0].Tier)
+			if !quietMode {
+				fmt.Fprintf(os.Stderr, "\nrunright: machine is %s — change instance type to cut costs\n", recs[0].Tier)
+			}
 			os.Exit(1)
 		}
 	}
-	fmt.Println("\nrunright: machine is right-sized")
+	if !quietMode {
+		fmt.Println("\nrunright: machine is right-sized")
+	}
 	return nil
 }
 
@@ -857,3 +953,550 @@ func saveAndEnableSSO(serverURL, apiKey string, config map[string]interface{}) e
 
 	return nil
 }
+
+// ── init ──────────────────────────────────────────────────────────────────────
+
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize RunRight in the current project",
+	Long: `init auto-detects your CI platform, generates a config file,
+and provides integration snippets for your CI system.
+
+Examples:
+  runright init                   # Auto-detect and generate config
+  runright init --platform github # Force GitHub Actions config
+  runright init --dry-run         # Show what would be created`,
+	RunE: runInit,
+}
+
+var (
+	initPlatform string
+	initDryRun   bool
+	initForce    bool
+)
+
+func init() {
+	initCmd.Flags().StringVar(&initPlatform, "platform", "", "Force specific platform: github, gitlab, jenkins, circleci, azure, bitbucket")
+	initCmd.Flags().BoolVar(&initDryRun, "dry-run", false, "Show what would be created without writing files")
+	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing config files")
+}
+
+func runInit(_ *cobra.Command, _ []string) error {
+	if !quietMode {
+		fmt.Println()
+		fmt.Println("╔═══════════════════════════════════════════════════════╗")
+		fmt.Println("║              RunRight Project Setup                   ║")
+		fmt.Println("╚═══════════════════════════════════════════════════════╝")
+		fmt.Println()
+	}
+
+	// Detect CI platform
+	detection := agent.DetectCI()
+	if initPlatform != "" {
+		detection.Platform = agent.CIPlatform(initPlatform)
+	}
+
+	if !quietMode {
+		fmt.Printf("Detected CI Platform: %s\n", detection.Platform)
+		if detection.Repository != "" {
+			fmt.Printf("Repository: %s\n", detection.Repository)
+		}
+	}
+
+	// Detect project type
+	project := agent.DetectProjectType()
+	if !quietMode && project.Language != "" {
+		fmt.Printf("Project Type: %s (%s)\n", project.Language, project.BuildTool)
+	}
+
+	// Generate config
+	cfg := agent.DefaultInitConfig(detection)
+	configContent, _ := agent.GenerateConfigFile(cfg)
+
+	if initDryRun {
+		fmt.Println()
+		fmt.Println("Would create .runright.yaml:")
+		fmt.Println("─────────────────────────────")
+		fmt.Println(configContent)
+		fmt.Println()
+		fmt.Println("CI Integration snippet:")
+		fmt.Println("───────────────────────")
+		fmt.Println(agent.GenerateCISnippet(detection.Platform, cfg))
+		return nil
+	}
+
+	// Check if config exists
+	if _, err := os.Stat(".runright.yaml"); err == nil && !initForce {
+		return fmt.Errorf(".runright.yaml already exists. Use --force to overwrite")
+	}
+
+	// Write config file
+	if err := agent.WriteConfigFile(".runright.yaml", configContent); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	if !quietMode {
+		fmt.Println("✓ Created .runright.yaml")
+	}
+
+	// Create output directory
+	if err := agent.EnsureOutputDir(cfg.OutputDir); err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+	if !quietMode {
+		fmt.Printf("✓ Created %s/ directory\n", cfg.OutputDir)
+	}
+
+	// Update .gitignore
+	if cfg.GitIgnore {
+		if err := agent.WriteGitIgnore(cfg.OutputDir); err != nil {
+			if !quietMode {
+				fmt.Printf("⚠ Could not update .gitignore: %v\n", err)
+			}
+		} else if !quietMode {
+			fmt.Println("✓ Updated .gitignore")
+		}
+	}
+
+	// Show CI integration snippet
+	if !quietMode {
+		fmt.Println()
+		fmt.Println("Add this to your CI configuration:")
+		fmt.Println("───────────────────────────────────")
+		fmt.Println(agent.GenerateCISnippet(detection.Platform, cfg))
+	}
+
+	if oneLiner {
+		fmt.Println(".runright.yaml")
+	}
+
+	return nil
+}
+
+// ── history ───────────────────────────────────────────────────────────────────
+
+var historyCmd = &cobra.Command{
+	Use:   "history",
+	Short: "View local run history",
+	Long: `history shows past monitoring runs stored in a local SQLite database.
+Use this to track trends without needing the RunRight platform.
+
+Examples:
+  runright history                    # Show recent runs
+  runright history --job-id build     # Filter by job ID
+  runright history --stats            # Show aggregate statistics
+  runright history --prune 30d        # Remove runs older than 30 days`,
+	RunE: runHistory,
+}
+
+var (
+	historyJobID     string
+	historyRepo      string
+	historyLimit     int
+	historyStats     bool
+	historyPrune     string
+	historyDBPath    string
+)
+
+func init() {
+	historyCmd.Flags().StringVar(&historyJobID, "job-id", "", "Filter by job ID")
+	historyCmd.Flags().StringVar(&historyRepo, "repository", "", "Filter by repository")
+	historyCmd.Flags().IntVar(&historyLimit, "limit", 20, "Maximum number of runs to show")
+	historyCmd.Flags().BoolVar(&historyStats, "stats", false, "Show aggregate statistics")
+	historyCmd.Flags().StringVar(&historyPrune, "prune", "", "Remove runs older than duration (e.g., 30d, 90d)")
+	historyCmd.Flags().StringVar(&historyDBPath, "db", "", "Path to history database (default: ~/.runright/history.db)")
+}
+
+func runHistory(_ *cobra.Command, _ []string) error {
+	db, err := agent.OpenHistory(historyDBPath)
+	if err != nil {
+		return fmt.Errorf("open history: %w", err)
+	}
+	defer db.Close()
+
+	// Handle prune
+	if historyPrune != "" {
+		duration, err := time.ParseDuration(historyPrune)
+		if err != nil {
+			// Try parsing as days
+			var days int
+			if _, err := fmt.Sscanf(historyPrune, "%dd", &days); err == nil {
+				duration = time.Duration(days) * 24 * time.Hour
+			} else {
+				return fmt.Errorf("invalid prune duration: %s (use e.g., 30d or 720h)", historyPrune)
+			}
+		}
+		deleted, err := db.Prune(duration)
+		if err != nil {
+			return fmt.Errorf("prune: %w", err)
+		}
+		fmt.Printf("Pruned %d runs older than %s\n", deleted, historyPrune)
+		return nil
+	}
+
+	// Handle stats
+	if historyStats {
+		stats, err := db.Stats()
+		if err != nil {
+			return fmt.Errorf("get stats: %w", err)
+		}
+
+		if jsonOutput {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(stats)
+		}
+
+		fmt.Println()
+		fmt.Println("RunRight History Statistics")
+		fmt.Println("───────────────────────────")
+		fmt.Printf("Total Runs:          %d\n", stats.TotalRuns)
+		fmt.Printf("Unique Jobs:         %d\n", stats.UniqueJobs)
+		fmt.Printf("Unique Repos:        %d\n", stats.UniqueRepos)
+		fmt.Printf("Total Duration:      %.1f minutes\n", stats.TotalDurationMin)
+		fmt.Printf("Avg CPU (p95):       %.1f%%\n", stats.AvgCPUP95)
+		fmt.Printf("Avg Memory (p95):    %.2f GiB\n", stats.AvgMemP95)
+		fmt.Printf("Oversized Runs:      %d\n", stats.OversizedRuns)
+		if stats.PotentialSavings > 0 {
+			fmt.Printf("Est. Monthly Savings: $%.2f\n", stats.PotentialSavings)
+		}
+		return nil
+	}
+
+	// List runs
+	runs, err := db.ListRuns(agent.ListOptions{
+		JobID:      historyJobID,
+		Repository: historyRepo,
+		Limit:      historyLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("list runs: %w", err)
+	}
+
+	if len(runs) == 0 {
+		fmt.Println("No runs found. Run 'runright monitor' to record your first run.")
+		return nil
+	}
+
+	if jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(runs)
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "TIME\tJOB\tDURATION\tCPU p95\tMEM p95\tRECOMMEND\tDELTA")
+	fmt.Fprintln(w, "----\t---\t--------\t-------\t-------\t---------\t-----")
+	for _, r := range runs {
+		delta := ""
+		if r.CostDelta != 0 {
+			delta = fmt.Sprintf("%+.0f%%", r.CostDelta)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%.0fs\t%.1f%%\t%.2f GiB\t%s\t%s\n",
+			r.StartTime.Format("2006-01-02 15:04"),
+			truncate(r.JobID, 20),
+			r.DurationSeconds,
+			r.CPUPercentP95,
+			r.MemUsedGiBP95,
+			r.TopRecommend,
+			delta,
+		)
+	}
+	return w.Flush()
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-3] + "..."
+}
+
+// ── diff ──────────────────────────────────────────────────────────────────────
+
+var diffCmd = &cobra.Command{
+	Use:   "diff",
+	Short: "Compare two monitoring runs",
+	Long: `diff compares two metrics summaries to highlight changes in resource usage.
+Useful for comparing before/after optimizations or PR comparisons.
+
+Examples:
+  runright diff --before metrics-old.json --after metrics-new.json
+  runright diff --run1 abc123 --run2 def456   # Compare by run ID from history`,
+	RunE: runDiff,
+}
+
+var (
+	diffBefore string
+	diffAfter  string
+	diffRun1   string
+	diffRun2   string
+)
+
+func init() {
+	diffCmd.Flags().StringVar(&diffBefore, "before", "", "Path to before metrics-summary.json")
+	diffCmd.Flags().StringVar(&diffAfter, "after", "", "Path to after metrics-summary.json")
+	diffCmd.Flags().StringVar(&diffRun1, "run1", "", "First run ID from history")
+	diffCmd.Flags().StringVar(&diffRun2, "run2", "", "Second run ID from history")
+}
+
+func runDiff(_ *cobra.Command, _ []string) error {
+	var before, after types.MetricsSummary
+
+	if diffBefore != "" && diffAfter != "" {
+		// Load from files
+		data1, err := os.ReadFile(diffBefore)
+		if err != nil {
+			return fmt.Errorf("read before: %w", err)
+		}
+		if err := json.Unmarshal(data1, &before); err != nil {
+			return fmt.Errorf("parse before: %w", err)
+		}
+
+		data2, err := os.ReadFile(diffAfter)
+		if err != nil {
+			return fmt.Errorf("read after: %w", err)
+		}
+		if err := json.Unmarshal(data2, &after); err != nil {
+			return fmt.Errorf("parse after: %w", err)
+		}
+	} else if diffRun1 != "" && diffRun2 != "" {
+		// Load from history
+		db, err := agent.OpenHistory("")
+		if err != nil {
+			return fmt.Errorf("open history: %w", err)
+		}
+		defer db.Close()
+
+		entry1, err := db.GetRun(diffRun1)
+		if err != nil {
+			return fmt.Errorf("get run1: %w", err)
+		}
+		if entry1 == nil || entry1.Summary == nil {
+			return fmt.Errorf("run %s not found or has no summary", diffRun1)
+		}
+		before = *entry1.Summary
+
+		entry2, err := db.GetRun(diffRun2)
+		if err != nil {
+			return fmt.Errorf("get run2: %w", err)
+		}
+		if entry2 == nil || entry2.Summary == nil {
+			return fmt.Errorf("run %s not found or has no summary", diffRun2)
+		}
+		after = *entry2.Summary
+	} else {
+		return fmt.Errorf("specify --before/--after or --run1/--run2")
+	}
+
+	output := engine.ExplainDiff(before, after)
+	fmt.Println(output)
+	return nil
+}
+
+// ── doctor ────────────────────────────────────────────────────────────────────
+
+var doctorCmd = &cobra.Command{
+	Use:   "doctor",
+	Short: "Diagnose system configuration and capabilities",
+	Long: `doctor runs a series of diagnostic checks to verify RunRight
+can access system metrics, network, and optional features like
+GPU monitoring and Docker container metrics.
+
+Examples:
+  runright doctor                 # Run all diagnostics
+  runright doctor --json          # Output as JSON`,
+	RunE: runDoctor,
+}
+
+func runDoctor(_ *cobra.Command, _ []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	report := agent.RunDiagnostics(ctx)
+
+	if jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+
+	fmt.Println()
+	fmt.Println("╔═══════════════════════════════════════════════════════╗")
+	fmt.Println("║              RunRight System Diagnostics              ║")
+	fmt.Println("╚═══════════════════════════════════════════════════════╝")
+	fmt.Println()
+	fmt.Printf("Platform: %s\n", report.Platform)
+	fmt.Printf("Go Version: %s\n", report.GoVersion)
+	fmt.Printf("RunRight Version: %s\n", Version)
+	fmt.Println()
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "CHECK\tSTATUS\tMESSAGE")
+	fmt.Fprintln(w, "-----\t------\t-------")
+
+	for _, c := range report.Checks {
+		status := c.Status
+		switch c.Status {
+		case "pass":
+			status = color.GreenString("✓ PASS")
+		case "warn":
+			status = color.YellowString("⚠ WARN")
+		case "fail":
+			status = color.RedString("✗ FAIL")
+		case "skip":
+			status = color.HiBlackString("○ SKIP")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", c.Name, status, c.Message)
+	}
+	_ = w.Flush()
+
+	fmt.Println()
+	fmt.Printf("Summary: %d passed, %d warnings, %d failed, %d skipped\n",
+		report.PassCount, report.WarnCount, report.FailCount, report.SkipCount)
+
+	if report.FailCount > 0 {
+		os.Exit(1)
+	}
+	return nil
+}
+
+// ── explain ───────────────────────────────────────────────────────────────────
+
+var explainCmd = &cobra.Command{
+	Use:   "explain",
+	Short: "Explain a recommendation in human-readable terms",
+	Long: `explain provides a detailed breakdown of why a recommendation
+was made, including CPU/memory analysis and cost calculations.
+
+Examples:
+  runright explain --metrics metrics-summary.json
+  runright explain --metrics metrics-summary.json --machine t3.medium`,
+	RunE: runExplain,
+}
+
+var (
+	explainMetrics  string
+	explainMachine  string
+)
+
+func init() {
+	explainCmd.Flags().StringVar(&explainMetrics, "metrics", "metrics-summary.json", "Path to metrics-summary.json")
+	explainCmd.Flags().StringVar(&explainMachine, "machine", "", "Specific machine to explain (default: top recommendation)")
+}
+
+func runExplain(_ *cobra.Command, _ []string) error {
+	data, err := os.ReadFile(explainMetrics)
+	if err != nil {
+		return fmt.Errorf("read metrics: %w", err)
+	}
+
+	var summary types.MetricsSummary
+	if err := json.Unmarshal(data, &summary); err != nil {
+		return fmt.Errorf("parse metrics: %w", err)
+	}
+
+	machines := catalog.Query(catalog.QueryOptions{})
+	recs := engine.Recommend(summary, machines)
+
+	if len(recs) == 0 {
+		return fmt.Errorf("no recommendations available")
+	}
+
+	// Find the recommendation to explain
+	var rec types.Recommendation
+	if explainMachine != "" {
+		found := false
+		for _, r := range recs {
+			if r.Machine.ID == explainMachine {
+				rec = r
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("machine %s not in recommendations", explainMachine)
+		}
+	} else {
+		rec = recs[0]
+	}
+
+	explanation := engine.Explain(summary, rec)
+
+	if jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(explanation)
+	}
+
+	fmt.Println(explanation.DetailedBreakdown)
+
+	if len(explanation.Warnings) > 0 {
+		fmt.Println("\nWarnings:")
+		for _, w := range explanation.Warnings {
+			fmt.Printf("  ⚠ %s\n", w)
+		}
+	}
+
+	if len(explanation.Suggestions) > 0 {
+		fmt.Println("\nSuggestions:")
+		for _, s := range explanation.Suggestions {
+			fmt.Printf("  💡 %s\n", s)
+		}
+	}
+
+	return nil
+}
+
+// ── completion ────────────────────────────────────────────────────────────────
+
+var completionCmd = &cobra.Command{
+	Use:   "completion [bash|zsh|fish|powershell]",
+	Short: "Generate shell completion scripts",
+	Long: `Generate shell completion scripts for RunRight.
+
+To load completions:
+
+Bash:
+  $ source <(runright completion bash)
+  # To load completions for each session, execute once:
+  # Linux:
+  $ runright completion bash > /etc/bash_completion.d/runright
+  # macOS:
+  $ runright completion bash > /usr/local/etc/bash_completion.d/runright
+
+Zsh:
+  $ source <(runright completion zsh)
+  # To load completions for each session, execute once:
+  $ runright completion zsh > "${fpath[1]}/_runright"
+
+Fish:
+  $ runright completion fish | source
+  # To load completions for each session, execute once:
+  $ runright completion fish > ~/.config/fish/completions/runright.fish
+
+PowerShell:
+  PS> runright completion powershell | Out-String | Invoke-Expression
+  # To load completions for each session, execute once:
+  PS> runright completion powershell > runright.ps1
+  # and source this file from your PowerShell profile.
+`,
+	DisableFlagsInUseLine: true,
+	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+	Args:                  cobra.ExactValidArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		switch args[0] {
+		case "bash":
+			return rootCmd.GenBashCompletion(os.Stdout)
+		case "zsh":
+			return rootCmd.GenZshCompletion(os.Stdout)
+		case "fish":
+			return rootCmd.GenFishCompletion(os.Stdout, true)
+		case "powershell":
+			return rootCmd.GenPowerShellCompletionWithDesc(os.Stdout)
+		}
+		return nil
+	},
+}
+
+// Suppress unused import warning
+var _ = runtime.GOOS

@@ -1,6 +1,6 @@
 <h1 align="center">RunRight</h1>
 
-<p align="center"><strong>Right-size your CI machines.</strong> RunRight runs alongside every CI job, samples CPU/memory/disk/threads, and recommends the cheapest AWS or GCP instance that still fits your workload.</p>
+<p align="center"><strong>Right-size your CI machines.</strong> RunRight runs alongside every CI job, samples CPU/memory/disk/threads, and recommends the cheapest AWS, GCP, or Azure instance that still fits your workload.</p>
 
 <p align="center">Self-hosted · ELv2 · No SaaS · Container-aware (cgroup v2/v1)</p>
 
@@ -8,7 +8,7 @@
 
 ## Why RunRight
 
-Grafana, Datadog, and Sentry tell you how your application behaves. They do not tell you whether you are paying for the right machine. **RunRight solves that: given your actual p95 CPU and memory usage, it recommends the cheapest AWS or GCP instance type that still fits your workload.**
+Grafana, Datadog, and Sentry tell you how your application behaves. They do not tell you whether you are paying for the right machine. **RunRight solves that: given your actual p95 CPU and memory usage, it recommends the cheapest AWS, GCP, or Azure instance type that still fits your workload.**
 
 ### Key Features
 
@@ -16,6 +16,9 @@ Grafana, Datadog, and Sentry tell you how your application behaves. They do not 
 - **Minimal overhead.** Polls `/proc` every 5s. Footprint: under 5 MB RSS, under 0.1% CPU. Your builds stay fast.
 - **Actionable insights.** Get specific instance recommendations with cost delta and tier labels—no graphs to interpret.
 - **Works with your stack.** Exports via OTLP, Prometheus, or JSON. Integrates with Datadog, Grafana Cloud, or any observability tool.
+- **Multi-cloud support.** Recommendations for AWS, GCP, and Azure including ARM instances (Graviton, Ampere).
+- **Policy enforcement.** Fail CI if wasting >N% with `--fail-if-oversized`.
+- **Local history.** Track trends with `runright history` — no platform required.
 
 ---
 
