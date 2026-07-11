@@ -8,7 +8,6 @@ type Provider string
 const (
 	ProviderAWS    Provider = "aws"
 	ProviderGCP    Provider = "gcp"
-	ProviderAzure  Provider = "azure"
 	ProviderGitHub Provider = "github"
 )
 
