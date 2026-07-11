@@ -85,15 +85,18 @@ func TestCollector_HeartbeatFile(t *testing.T) {
 	dir := t.TempDir()
 	hbPath := filepath.Join(dir, "metrics-heartbeat.json")
 
+	// Use generous intervals so the test is stable under -race on loaded CI
+	// runners. Each collect() invokes psutil (cpu.Percent, disk/net counters)
+	// which can take 50-100 ms; the race detector adds further overhead.
 	c := NewCollector(Config{
-		Interval:          50 * time.Millisecond,
-		HeartbeatInterval: 100 * time.Millisecond,
+		Interval:          200 * time.Millisecond,
+		HeartbeatInterval: 400 * time.Millisecond,
 		OutputDir:         dir,
 		JobID:             "test-heartbeat",
 		HeartbeatFilePath: hbPath,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_ = c.Run(ctx)
 
